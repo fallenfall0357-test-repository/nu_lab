@@ -26,7 +26,7 @@ DATA_DIR = "GALAXY"
 IMAGE_SIZE = 64
 CHANNELS = 3
 BATCH_SIZE = 32
-EPOCHS = 20
+EPOCHS = 100
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -132,7 +132,10 @@ def train():
             loss = F.mse_loss(score_pred, target)
             opt.zero_grad(); loss.backward(); opt.step()
             pbar.set_postfix(loss=loss.item())
-        torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"score_epoch{epoch+1}.pt"))
+        if epoch == EPOCHS - 1:
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"score_epoch{epoch+1}.pt"))
+        elif (epoch + 1) % (EPOCHS / 10) == 0:
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"score_epoch{epoch+1}.pt"))
 
 # ---------------- Sampling ----------------
 @torch.no_grad()
