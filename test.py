@@ -22,7 +22,7 @@ from torchvision import transforms, utils
 from PIL import Image
 
 # ---------------- Config ----------------
-DATA_DIR = "data/images"
+DATA_DIR = "GALAXY"
 IMAGE_SIZE = 64
 CHANNELS = 3
 BATCH_SIZE = 32
@@ -44,8 +44,8 @@ def beta_t(t):
 # ---------------- Dataset ----------------
 class PNGImageFolder(Dataset):
     def __init__(self, folder, image_size=IMAGE_SIZE):
-        self.files = [p for p in Path(folder).glob("**/*.png")]
-        assert len(self.files) > 0, f"No PNGs found in {folder}"
+        self.files = [p for p in Path(folder).glob("**/*.jpg")]
+        assert len(self.files) > 0, f"No JPGs found in {folder}"
         self.transform = transforms.Compose([
             transforms.Resize(image_size),
             transforms.CenterCrop(image_size),
