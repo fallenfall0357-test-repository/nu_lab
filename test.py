@@ -38,7 +38,7 @@ os.makedirs(SAMPLE_DIR, exist_ok=True)
 # Time-dependent beta schedule (VP-SDE)
 def beta_t(t):
     # t in [0,1], linear schedule
-    beta_min, beta_max = 0.1, 20.0
+    beta_min, beta_max = 0.1, 10.0
     return beta_min + (beta_max - beta_min) * t
 
 # ---------------- Dataset ----------------
@@ -64,8 +64,8 @@ class Block(nn.Module):
         super().__init__()
         self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
         self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1)
-        self.norm1 = nn.BatchNorm2d(out_ch)
-        self.norm2 = nn.BatchNorm2d(out_ch)
+        self.norm1 = nn.GroupNorm(out_ch)
+        self.norm2 = nn.GroupNorm(out_ch)
         self.act = nn.SiLU()
         self.t_proj = nn.Linear(t_dim, out_ch) if t_dim else None
     def forward(self, x, t_emb=None):
@@ -110,7 +110,7 @@ class SimpleUNetScore(nn.Module):
 def train():
     dataset = JPGImageFolder(DATA_DIR, IMAGE_SIZE)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
-    model = SimpleUNetScore().to(DEVICE)
+    model = SimpleUNetScore(in_channels=CHANNELS, base_ch=256).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=LR)
 
     for epoch in range(EPOCHS):
