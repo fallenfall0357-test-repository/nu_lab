@@ -42,7 +42,7 @@ def beta_t(t):
     return beta_min + (beta_max - beta_min) * t
 
 # ---------------- Dataset ----------------
-class PNGImageFolder(Dataset):
+class JPGImageFolder(Dataset):
     def __init__(self, folder, image_size=IMAGE_SIZE):
         self.files = [p for p in Path(folder).glob("**/*.jpg")]
         assert len(self.files) > 0, f"No JPGs found in {folder}"
@@ -108,7 +108,7 @@ class SimpleUNetScore(nn.Module):
 
 # ---------------- Training ----------------
 def train():
-    dataset = PNGImageFolder(DATA_DIR, IMAGE_SIZE)
+    dataset = JPGImageFolder(DATA_DIR, IMAGE_SIZE)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
     model = SimpleUNetScore().to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=LR)
