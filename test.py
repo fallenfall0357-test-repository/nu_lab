@@ -31,7 +31,7 @@ DATA_DIR = "ROOF"
 IMAGE_SIZE = 64
 CHANNELS = 3
 BATCH_SIZE = 32
-EPOCHS = 10
+EPOCHS = 100
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
