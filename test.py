@@ -26,7 +26,7 @@ DATA_DIR = "GALAXY"
 IMAGE_SIZE = 64
 CHANNELS = 3
 BATCH_SIZE = 32
-EPOCHS = 100
+EPOCHS = 500
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -64,8 +64,8 @@ class Block(nn.Module):
         super().__init__()
         self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
         self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1)
-        self.norm1 = nn.GroupNorm(out_ch)
-        self.norm2 = nn.GroupNorm(out_ch)
+        self.norm1 = nn.GroupNorm(8,out_ch)
+        self.norm2 = nn.GroupNorm(8,out_ch)
         self.act = nn.SiLU()
         self.t_proj = nn.Linear(t_dim, out_ch) if t_dim else None
     def forward(self, x, t_emb=None):
@@ -134,13 +134,13 @@ def train():
             pbar.set_postfix(loss=loss.item())
         if epoch == EPOCHS - 1:
             torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"score_epoch{epoch+1}.pt"))
-        elif (epoch + 1) % (EPOCHS / 10) == 0:
-            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"score_epoch{epoch+1}.pt"))
+#        elif (epoch + 1) % (EPOCHS / 10) == 0:
+#            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"score_epoch{epoch+1}.pt"))
 
 # ---------------- Sampling ----------------
 @torch.no_grad()
 def sample(model_path, n=16, steps=1000):
-    model = SimpleUNetScore().to(DEVICE)
+    model = SimpleUNetScore(in_channels=CHANNELS, base_ch=256).to(DEVICE)
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
     model.eval()
     x = torch.randn(n, CHANNELS, IMAGE_SIZE, IMAGE_SIZE, device=DEVICE)
