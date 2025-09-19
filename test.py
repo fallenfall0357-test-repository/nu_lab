@@ -204,13 +204,14 @@ def train():
             opt.step()
             global_step += 1
             pbar.set_postfix(loss=loss.item())
-            if global_step % 1000 == 0:
-                model.eval()
-                samples = p_sample_loop(model, (16, CHANNELS, IMAGE_SIZE, IMAGE_SIZE))
-                utils.save_image((samples + 1) / 2.0, os.path.join(SAMPLE_DIR, f"sample_{global_step}.png"), nrow=4)
-                torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_step{global_step}.pt"))
-                model.train()
-        torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_epoch{epoch+1}.pt"))
+
+        model.eval()
+        samples = p_sample_loop(model, (16, CHANNELS, IMAGE_SIZE, IMAGE_SIZE))
+        utils.save_image((samples + 1) / 2.0, os.path.join(SAMPLE_DIR, f"sample_epoch{epoch+1}.png"), nrow=4)
+        model.train()
+
+        if (epoch+1) % (EPOCHS / 10) == 0:
+            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_epoch{epoch+1}.pt"))
 
 # ---------------- Sampling helper ----------------
 @torch.no_grad()
