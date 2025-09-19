@@ -27,11 +27,11 @@ from torchvision import transforms, utils
 from PIL import Image
 
 # ---------------- Config ----------------
-DATA_DIR = "GALAXY"
+DATA_DIR = "ROOF"
 IMAGE_SIZE = 64
 CHANNELS = 3
 BATCH_SIZE = 32
-EPOCHS = 100
+EPOCHS = 10
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -210,7 +210,7 @@ def train():
         utils.save_image((samples + 1) / 2.0, os.path.join(SAMPLE_DIR, f"sample_epoch{epoch+1}.png"), nrow=4)
         model.train()
 
-        if (epoch+1) % (EPOCHS / 10) == 0:
+        if ((epoch+1) % (EPOCHS / 10) == 0 if EPOCHS >= 10 else True):
             torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_epoch{epoch+1}.pt"))
 
 # ---------------- Sampling helper ----------------
