@@ -54,10 +54,9 @@ sqrt_one_minus_alphas_cumprod = torch.sqrt(1. - alphas_cumprod)
 
 # helper to index tensors for a batch of indices t
 def extract(a, t, x_shape):
-    # a: (T,), t: (B,), x_shape: (B,C,H,W)
-    bs = t.size(0)
-    out = a.gather(0, t).float().to(t.device)
-    return out.view(bs, *((1,) * (len(x_shape) - 1)))
+    a = a.to(t.device)               # 确保和 t 一致
+    out = a.gather(0, t).float()
+    return out.reshape(-1, *((1,) * (len(x_shape) - 1)))
 
 # ---------------- Dataset ----------------
 class JPGImageFolder(Dataset):
