@@ -64,8 +64,7 @@ class JPGImageFolder(Dataset):
         self.files = [p for p in Path(folder).glob("**/*.jpg")] + [p for p in Path(folder).glob("**/*.png")]
         assert len(self.files) > 0, f"No images found in {folder}"
         self.transform = transforms.Compose([
-            transforms.Resize(image_size),
-            transforms.CenterCrop(image_size),
+            transforms.Resize((image_size, image_size), interpolation=Image.LANCZOS),
             transforms.ToTensor(),
             transforms.Normalize([0.5]*CHANNELS, [0.5]*CHANNELS),
         ])
