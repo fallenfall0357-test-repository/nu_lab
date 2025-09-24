@@ -27,8 +27,8 @@ from torchvision import transforms, utils
 from PIL import Image
 
 # ---------------- Config ----------------
-DATA_DIR = "ROOF"
-IMAGE_SIZE = 64
+DATA_DIR = "CIFAR10"
+IMAGE_SIZE = 32
 CHANNELS = 3
 BATCH_SIZE = 32
 EPOCHS = 100
