@@ -204,10 +204,10 @@ def train():
             global_step += 1
             pbar.set_postfix(loss=loss.item())
 
-        model.eval()
+        model.eval()#into eval
         samples = p_sample_loop(model, (16, CHANNELS, IMAGE_SIZE, IMAGE_SIZE))
         utils.save_image((samples + 1) / 2.0, os.path.join(SAMPLE_DIR, f"sample_epoch{epoch+1}.png"), nrow=4)
-        model.train()
+        model.train()#into train
 
         if ((epoch+1) % (EPOCHS / 10) == 0 if EPOCHS >= 10 else True):
             torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_epoch{epoch+1}.pt"))
