@@ -1,14 +1,24 @@
 import torch
-from torch_geometric.datasets import QM9
+from torch_geometric.data import InMemoryDataset, Data
 from rdkit import Chem
 
-# 把 PyG 自带的 QM9 样本中的 SMILES 转成 RDKit Mol
+# -------------------------
+# 路径配置
+# -------------------------
+RAW_ZIP_PATH = "data/QM9/raw/qm9.zip"  # 手动下载的 QM9 zip 文件
+EXTRACT_DIR = "data/QM9/raw"           # zip 解压路径
+
+# -------------------------
+# 将 SMILES 转成 RDKit Mol
+# -------------------------
 def smiles_to_mol(smiles: str):
     mol = Chem.MolFromSmiles(smiles)
     mol = Chem.AddHs(mol)  # 加氢原子
     return mol
 
-# 根据 RDKit Mol 生成有向加权边 (edge_index, edge_attr)
+# -------------------------
+# 生成有向加权边
+# -------------------------
 def mol_to_directed_edges(mol):
     edge_index = []
     edge_attr = []
@@ -17,7 +27,6 @@ def mol_to_directed_edges(mol):
         i = bond.GetBeginAtomIdx()
         j = bond.GetEndAtomIdx()
 
-        # 键类型 -> 数值权重
         bt = bond.GetBondType()
         if bt == Chem.rdchem.BondType.SINGLE:
             w = 1.0
@@ -30,7 +39,6 @@ def mol_to_directed_edges(mol):
         else:
             w = 0.0
 
-        # 有向边：i→j 和 j→i
         edge_index.append([i, j])
         edge_index.append([j, i])
         edge_attr.append([w])
@@ -40,37 +48,42 @@ def mol_to_directed_edges(mol):
     edge_attr = torch.tensor(edge_attr, dtype=torch.float)
     return edge_index, edge_attr
 
+# -------------------------
+# 自定义小型 QM9 数据集读取
+# -------------------------
+class LocalQM9Dataset(InMemoryDataset):
+    def __init__(self, root, limit=None):
+        super().__init__(root)
+        # 假设你提前用 pickle 或其他方法保存了 SMILES 列表和属性
+        # 这里我们示范用一个小列表
+        smiles_list = [
+            "O=C=O", "CCO", "CC(=O)O"  # 示例
+        ]
+        if limit:
+            smiles_list = smiles_list[:limit]
 
-# 封装一个函数，替换 QM9 的边特征
-def process_qm9_to_directed(root="data/QM9", limit=None):
-    dataset = QM9(root=root)
-    new_data_list = []
+        data_list = []
+        for smiles in smiles_list:
+            mol = smiles_to_mol(smiles)
+            if mol is None:
+                continue
+            edge_index, edge_attr = mol_to_directed_edges(mol)
 
-    for idx, data in enumerate(dataset):
-        smiles = data.smiles
-        mol = smiles_to_mol(smiles)
-        if mol is None:
-            continue
+            # 随便生成一些节点特征
+            x = torch.tensor([[atom.GetAtomicNum()] for atom in mol.GetAtoms()], dtype=torch.float)
+            data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+            data_list.append(data)
 
-        edge_index, edge_attr = mol_to_directed_edges(mol)
+        self.data, self.slices = self.collate(data_list)
 
-        # 替换 data 中的边
-        data.edge_index = edge_index
-        data.edge_attr = edge_attr
-
-        new_data_list.append(data)
-
-        if limit and idx >= limit - 1:
-            break
-
-    return new_data_list
-
-
+# -------------------------
+# 使用示例
+# -------------------------
 if __name__ == "__main__":
-    new_dataset = process_qm9_to_directed(limit=3)  # 先取 3 个样本看看
-    for i, d in enumerate(new_dataset):
+    dataset = LocalQM9Dataset(root="data/QM9", limit=3)
+    for i, data in enumerate(dataset):
         print(f"Sample {i}:")
-        print("x (atom features):", d.x.shape)
-        print("edge_index:\n", d.edge_index)
-        print("edge_attr (weights):\n", d.edge_attr.squeeze())
+        print("x (atom features):", data.x)
+        print("edge_index:\n", data.edge_index)
+        print("edge_attr:\n", data.edge_attr.squeeze())
         print("-" * 50)
