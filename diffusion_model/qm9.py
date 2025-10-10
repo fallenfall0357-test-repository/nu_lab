@@ -1,6 +1,8 @@
 import torch
 from torch_geometric.data import InMemoryDataset, Data
 from rdkit import Chem
+import networkx as nx
+import matplotlib.pyplot as plt
 
 # -------------------------
 # 路径配置
@@ -76,6 +78,47 @@ class LocalQM9Dataset(InMemoryDataset):
 
         self.data, self.slices = self.collate(data_list)
 
+def visualize_tensor_graph(data, title="Molecule Graph (tensor view)"):
+    """
+    可视化 PyG 格式的图数据（使用 edge_index, edge_attr, x）
+    """
+    G = nx.DiGraph()  # 用有向图
+
+    edge_index = data.edge_index.cpu().numpy()
+    edge_attr = data.edge_attr.squeeze().cpu().numpy() if data.edge_attr is not None else None
+    x = data.x.cpu().numpy()
+
+    # 添加节点
+    for i in range(x.shape[0]):
+        node_label = ",".join([f"{v:.2f}" for v in x[i]])  # 展示节点特征
+        G.add_node(i, label=node_label)
+
+    # 添加边
+    for k, (src, dst) in enumerate(edge_index.T):
+        weight = edge_attr[k] if edge_attr is not None else 1.0
+        G.add_edge(int(src), int(dst), weight=weight)
+
+    pos = nx.spring_layout(G, seed=42)  # 自动布局
+    labels = {i: G.nodes[i]["label"] for i in G.nodes}
+    edge_labels = {(u, v): f"{d['weight']:.1f}" for u, v, d in G.edges(data=True)}
+
+    plt.figure(figsize=(6, 6))
+    nx.draw(
+        G, pos,
+        with_labels=True,
+        labels={i: i for i in G.nodes},
+        node_color="lightblue",
+        node_size=800,
+        arrows=True
+    )
+    nx.draw_networkx_labels(G, pos, labels=labels, font_size=8, verticalalignment="bottom")
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="red")
+
+    plt.title(title)
+    plt.axis("off")
+    plt.savefig("molgraph/" + title + ".png")
+    # plt.show()
+
 # -------------------------
 # 使用示例
 # -------------------------
@@ -87,3 +130,4 @@ if __name__ == "__main__":
         print("edge_index:\n", data.edge_index)
         print("edge_attr:\n", data.edge_attr.squeeze())
         print("-" * 50)
+        visualize_tensor_graph(data, title=f"Sample_{i}_tensor_view")
