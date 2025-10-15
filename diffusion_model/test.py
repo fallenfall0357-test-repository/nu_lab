@@ -27,11 +27,11 @@ from torchvision import transforms, utils
 from PIL import Image
 
 # ---------------- Config ----------------
-DATA_DIR = "CIFAR10"
-IMAGE_SIZE = 64
+DATA_DIR = "data/QM9/processed_qm9_1K.pt"
+IMAGE_SIZE = 32
 CHANNELS = 3
 BATCH_SIZE = 32
-EPOCHS = 100
+EPOCHS = 10
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -182,7 +182,7 @@ def p_sample_loop(model, shape):
 
 # ---------------- Training ----------------
 def train():
-    dataset = JPGImageFolder(DATA_DIR, IMAGE_SIZE)
+    dataset = torch.load(DATA_DIR)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
     model = SmallUNet(in_channels=CHANNELS, base_ch=128).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=LR)
@@ -204,10 +204,10 @@ def train():
             global_step += 1
             pbar.set_postfix(loss=loss.item())
 
-        model.eval()#into eval
+        model.eval()
         samples = p_sample_loop(model, (16, CHANNELS, IMAGE_SIZE, IMAGE_SIZE))
         utils.save_image((samples + 1) / 2.0, os.path.join(SAMPLE_DIR, f"sample_epoch{epoch+1}.png"), nrow=4)
-        model.train()#into train
+        model.train()
 
         if ((epoch+1) % (EPOCHS / 10) == 0 if EPOCHS >= 10 else True):
             torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_epoch{epoch+1}.pt"))

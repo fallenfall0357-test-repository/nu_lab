@@ -146,7 +146,7 @@ def visualize_tensor_graphs_grid(dataset, n_rows=3, n_cols=3, save_path="output/
 # -------------------------
 # 自定义 QM9 数据集
 # -------------------------
-def graph_to_image_tensor(data, max_nodes=64):
+def graph_to_image_tensor(data, max_nodes=32):
     """
     把 Data对象 转成 [C, H, W] 张量
     C = 3 (邻接矩阵 / 边权重 / 原子序号)
