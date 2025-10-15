@@ -31,7 +31,7 @@ DATA_DIR = "data/QM9/processed_qm9_5M.pt"
 IMAGE_SIZE = 32
 CHANNELS = 3
 BATCH_SIZE = 32
-EPOCHS = 10
+EPOCHS = 100
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
