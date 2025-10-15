@@ -27,7 +27,7 @@ from torchvision import transforms, utils
 from PIL import Image
 
 # ---------------- Config ----------------
-DATA_DIR = "data/QM9/processed_qm9_1K.pt"
+DATA_DIR = "data/QM9/processed_qm9_5M.pt"
 IMAGE_SIZE = 32
 CHANNELS = 3
 BATCH_SIZE = 32
