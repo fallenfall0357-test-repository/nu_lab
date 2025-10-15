@@ -27,7 +27,7 @@ from torchvision import transforms, utils
 from PIL import Image
 
 # ---------------- Config ----------------
-DATA_DIR = "CIFAR10"
+DATA_DIR = "data/CIFAR10"
 IMAGE_SIZE = 64
 CHANNELS = 3
 BATCH_SIZE = 32

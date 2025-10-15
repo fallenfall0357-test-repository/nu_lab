@@ -84,7 +84,7 @@ def build_edges_from_coords(coords, atoms, cutoff=1.8):
 # -------------------------
 # 可视化图
 # -------------------------
-def visualize_tensor_graphs_grid(dataset, n_rows=3, n_cols=3, save_path="molgraph/molecule_grid.png"):
+def visualize_tensor_graphs_grid(dataset, n_rows=3, n_cols=3, save_path="output/molgraph/molecule_grid.png"):
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * 4, n_rows * 4))
     axes = axes.flatten()
