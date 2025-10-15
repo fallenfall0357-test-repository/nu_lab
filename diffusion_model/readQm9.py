@@ -6,6 +6,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from rdkit import Chem
 from rdkit.Chem import rdmolops
+from tqdm import tqdm
 
 # -------------------------
 # 路径配置
@@ -28,6 +29,18 @@ EXTRACT_DIR = "data/QM9/extracted"
 # -------------------------
 # 从单个 .xyz 文件读取原子和坐标
 # -------------------------
+# def read_xyz_file(xyz_path):
+#     atoms = []
+#     coords = []
+#     with open(xyz_path, "r") as f:
+#         lines = f.readlines()
+#     n_atoms = int(lines[0].strip())
+#     for line in lines[2:2 + n_atoms]:
+#         parts = line.split()
+#         if len(parts) >= 4:
+#             atoms.append(parts[0])
+#             coords.append([float(parts[1]), float(parts[2]), float(parts[3])])
+#     return atoms, torch.tensor(coords, dtype=torch.float)
 def read_xyz_file(xyz_path):
     atoms = []
     coords = []
@@ -38,7 +51,13 @@ def read_xyz_file(xyz_path):
         parts = line.split()
         if len(parts) >= 4:
             atoms.append(parts[0])
-            coords.append([float(parts[1]), float(parts[2]), float(parts[3])])
+
+            # ✅ 处理含 `*^` 的指数格式
+            x = parts[1].replace("*^", "e")
+            y = parts[2].replace("*^", "e")
+            z = parts[3].replace("*^", "e")
+
+            coords.append([float(x), float(y), float(z)])
     return atoms, torch.tensor(coords, dtype=torch.float)
 
 # -------------------------
@@ -127,6 +146,77 @@ def visualize_tensor_graphs_grid(dataset, n_rows=3, n_cols=3, save_path="molgrap
 # -------------------------
 # 自定义 QM9 数据集
 # -------------------------
+def graph_to_image_tensor(data, max_nodes=64):
+    """
+    把 Data对象 转成 [C, H, W] 张量
+    C = 3 (邻接矩阵 / 边权重 / 原子序号)
+    H = W = max_nodes
+    """
+    num_nodes = data.x.size(0)
+
+    # 获取邻接矩阵
+    A = torch.zeros((max_nodes, max_nodes))
+    W = torch.zeros((max_nodes, max_nodes))
+    X = torch.zeros((max_nodes, max_nodes))
+
+    edge_index = data.edge_index
+    edge_attr = data.edge_attr
+
+    for idx, (src, dst) in enumerate(edge_index.t()):
+        if src < max_nodes and dst < max_nodes:
+            A[src, dst] = 1
+            if edge_attr is not None:
+                W[src, dst] = edge_attr[idx].item()
+
+    # 节点特征 (原子序号) 填充对角或整行广播
+    for i in range(num_nodes):
+        if i < max_nodes:
+            X[i, :] = data.x[i]
+            X[:, i] = data.x[i]
+
+    # 拼成多通道
+    img_tensor = torch.stack([A, W, X], dim=0)  # [3, max_nodes, max_nodes]
+    return img_tensor
+
+def image_tensor_to_data(img_tensor, threshold=0.5):
+    A = img_tensor[0]
+    W = img_tensor[1]
+    X = img_tensor[2]
+
+    max_nodes = A.shape[0]
+    
+    # ✅ 直接用对角线恢复节点数
+    diag = torch.diag(X)
+    exists = diag > threshold
+    num_nodes = int(exists.sum().item())
+
+    if num_nodes == 0:
+        num_nodes = 1  # 避免空图崩溃
+
+    node_feats = diag[:num_nodes].view(-1, 1)
+
+    edge_index_list = []
+    edge_attr_list = []
+    for i in range(num_nodes):
+        for j in range(num_nodes):
+            if A[i, j] > threshold:
+                edge_index_list.append([i, j])
+                edge_attr_list.append([float(W[i, j])])
+
+    if edge_index_list:
+        edge_index = torch.tensor(edge_index_list, dtype=torch.long).t().contiguous()
+        edge_attr = torch.tensor(edge_attr_list, dtype=torch.float)
+    else:
+        edge_index = torch.empty((2, 0), dtype=torch.long)
+        edge_attr = torch.empty((0, 1), dtype=torch.float)
+
+    data = Data(
+        x=node_feats,
+        edge_index=edge_index,
+        edge_attr=edge_attr
+    )
+    return data
+
 class LocalQM9XYZDataset(InMemoryDataset):
     def __init__(self, root, limit=5):
         super().__init__(root)
@@ -136,7 +226,7 @@ class LocalQM9XYZDataset(InMemoryDataset):
             raise FileNotFoundError("❌ 未在解压目录中找到 .xyz 文件")
 
         data_list = []
-        for i, file in enumerate(files[:limit]):
+        for i, file in tqdm(enumerate(files[:limit]), desc=f"load data"):
             atoms, coords = read_xyz_file(file)
             atomic_numbers = [Chem.GetPeriodicTable().GetAtomicNumber(a) for a in atoms]
             x = torch.tensor([[z] for z in atomic_numbers], dtype=torch.float)
@@ -151,12 +241,21 @@ class LocalQM9XYZDataset(InMemoryDataset):
 # 运行示例
 # -------------------------
 if __name__ == "__main__":
-    dataset = LocalQM9XYZDataset(root="data/QM9", limit=9)
-    for i, data in enumerate(dataset):
-        print(f"Sample {i}:")
-        print("x (atomic numbers):", data.x.view(-1).tolist())
-        print("edge_index:\n", data.edge_index)
-        print("edge_attr:\n", data.edge_attr.squeeze())
-        print("-" * 50)
+    dataset = LocalQM9XYZDataset(root="data/QM9", limit=20000)
+    # save_path = "data/QM9/processed_qm9.pt"
+    save_path = "data/QM9/processed_qm9_2M.pt"
+    image_tensors = [graph_to_image_tensor(data) for data in dataset]
+    torch.save(image_tensors, save_path)
+    print(f"[✓] 数据集已保存到 {save_path}")
 
-    visualize_tensor_graphs_grid(dataset)
+    for i, data in enumerate(image_tensors):
+        print(f"Sample {i}:")
+        # print("x (atomic numbers):", data.x.view(-1).tolist())
+        # print("edge_index:\n", data.edge_index)
+        # print("edge_attr:\n", data.edge_attr.squeeze())
+        print(data.shape)
+
+        print("-" * 50)
+        if i > 2: break
+    # re_dataset = [image_tensor_to_data(img) for img in image_tensors]
+    # visualize_tensor_graphs_grid(re_dataset, save_path="molgraph/test.png")
