@@ -3,3 +3,4 @@
 *.pid
 diffusion_model/data/QM9/*.txt
 diffusion_model/data/QM9/*.bz2
+diffusion_model/data/QM9/processed_qm9_5M.pt
