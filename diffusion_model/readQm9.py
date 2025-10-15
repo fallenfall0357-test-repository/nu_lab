@@ -241,9 +241,9 @@ class LocalQM9XYZDataset(InMemoryDataset):
 # 运行示例
 # -------------------------
 if __name__ == "__main__":
-    dataset = LocalQM9XYZDataset(root="data/QM9", limit=50000)
+    dataset = LocalQM9XYZDataset(root="data/QM9", limit=1000)
     # save_path = "data/QM9/processed_qm9.pt"
-    save_path = "data/QM9/processed_qm9_5M.pt"
+    save_path = "data/QM9/processed_qm9_1K.pt"
     image_tensors = [graph_to_image_tensor(data) for data in dataset]
     torch.save(image_tensors, save_path)
     print(f"[✓] 数据集已保存到 {save_path}")
