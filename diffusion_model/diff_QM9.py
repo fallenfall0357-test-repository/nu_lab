@@ -35,8 +35,8 @@ EPOCHS = 100
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-SAVE_DIR = "checkpoints"
-SAMPLE_DIR = "samples"
+SAVE_DIR = "output/molgraph/weights/checkpoints"
+SAMPLE_DIR = "output/molgraph/samples"
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(SAMPLE_DIR, exist_ok=True)
 
@@ -58,21 +58,21 @@ def extract(a, t, x_shape):
     out = a.gather(0, t).float()
     return out.reshape(-1, *((1,) * (len(x_shape) - 1)))
 
-# ---------------- Dataset ----------------
-class JPGImageFolder(Dataset):
-    def __init__(self, folder, image_size=IMAGE_SIZE):
-        self.files = [p for p in Path(folder).glob("**/*.jpg")] + [p for p in Path(folder).glob("**/*.png")]
-        assert len(self.files) > 0, f"No images found in {folder}"
-        self.transform = transforms.Compose([
-            transforms.Resize((image_size, image_size), interpolation=Image.LANCZOS),
-            transforms.ToTensor(),
-            transforms.Normalize([0.5]*CHANNELS, [0.5]*CHANNELS),
-        ])
-    def __len__(self):
-        return len(self.files)
-    def __getitem__(self, idx):
-        img = Image.open(self.files[idx]).convert('RGB')
-        return self.transform(img)
+# # ---------------- Dataset ----------------
+# class JPGImageFolder(Dataset):
+#     def __init__(self, folder, image_size=IMAGE_SIZE):
+#         self.files = [p for p in Path(folder).glob("**/*.jpg")] + [p for p in Path(folder).glob("**/*.png")]
+#         assert len(self.files) > 0, f"No images found in {folder}"
+#         self.transform = transforms.Compose([
+#             transforms.Resize((image_size, image_size), interpolation=Image.LANCZOS),
+#             transforms.ToTensor(),
+#             transforms.Normalize([0.5]*CHANNELS, [0.5]*CHANNELS),
+#         ])
+#     def __len__(self):
+#         return len(self.files)
+#     def __getitem__(self, idx):
+#         img = Image.open(self.files[idx]).convert('RGB')
+#         return self.transform(img)
 
 # ---------------- Time embedding ----------------
 def sinusoidal_embedding(timesteps, dim):

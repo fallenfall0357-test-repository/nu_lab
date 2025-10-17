@@ -1,5 +1,4 @@
 import os
-import tarfile
 import torch
 from torch_geometric.data import InMemoryDataset, Data
 import networkx as nx
@@ -183,7 +182,7 @@ def image_tensor_to_data(img_tensor, threshold=0.5):
     W = img_tensor[1]
     X = img_tensor[2]
 
-    max_nodes = A.shape[0]
+    # max_nodes = A.shape[0]
     
     # ✅ 直接用对角线恢复节点数
     diag = torch.diag(X)

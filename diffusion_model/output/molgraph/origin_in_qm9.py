@@ -13,7 +13,7 @@ class LocalQM9XYZDataset(InMemoryDataset):
             self.data, self.slices = torch.load(processed_file)
 
 # 加载
-load_path = "data/QM9/processed_qm9_5M.pt"
+load_path = "../../data/QM9/processed_qm9_1K.pt"
 # dataset = LocalQM9XYZDataset(root="data/QM9", processed_file=load_path)
 dataset = torch.load(load_path)
 
