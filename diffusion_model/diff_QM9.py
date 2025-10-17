@@ -24,7 +24,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
-from PIL import Image
 
 # ---------------- Config ----------------
 DATA_DIR = "data/QM9/processed_qm9_5M.pt"
@@ -216,7 +215,7 @@ def train():
 @torch.no_grad()
 def sample_and_save(model_path, n=16):
     model = SmallUNet(in_channels=CHANNELS, base_ch=128).to(DEVICE)
-    model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+    model.load_state_dict(torch.load(model_path, map_location=DEVICE, weights_only=True))
     model.eval()
     samples = p_sample_loop(model, (n, CHANNELS, IMAGE_SIZE, IMAGE_SIZE))
     utils.save_image((samples + 1)/2.0, os.path.join(SAMPLE_DIR, f"sample_from_{Path(model_path).stem}.png"), nrow=int(math.sqrt(n)))

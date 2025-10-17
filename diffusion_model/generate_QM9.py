@@ -1,19 +1,14 @@
 import os
-import torch
-from torch_geometric.data import Data
-import networkx as nx
-import matplotlib.pyplot as plt
-
-
 import math
-from pathlib import Path
-from tqdm import tqdm
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
 from torchvision import utils
+from torch_geometric.data import Data
+from pathlib import Path
+from tqdm import tqdm
+import networkx as nx
+import matplotlib.pyplot as plt
 
 # ---------------- Config ----------------
 IMAGE_SIZE = 32
@@ -22,7 +17,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 SAVE_DIR = "output/molgraph/weights/checkpoints"
 WEIGHT_DIR = "output/molgraph/weights"
-SAMPLE_DIR = "output/molgraph/samples"
+SAMPLE_DIR = "output/molgraph/samples/graph_samples"
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(WEIGHT_DIR, exist_ok=True)
 os.makedirs(SAMPLE_DIR, exist_ok=True)
@@ -148,13 +143,13 @@ def image_tensor_to_data(img_tensor, threshold=0.5):
 
     # max_nodes = A.shape[0]
     
-    # ✅ 直接用对角线恢复节点数
+    # 直接用对角线恢复节点数
     diag = torch.diag(X)
     exists = diag > threshold
     num_nodes = int(exists.sum().item())
 
     if num_nodes == 0:
-        num_nodes = 1  # 避免空图崩溃
+        num_nodes = 1  # avoid empty crash
 
     node_feats = diag[:num_nodes].view(-1, 1)
 
@@ -206,7 +201,7 @@ def visualize_tensor_graphs_grid(dataset, n_rows=3, n_cols=3, save_path="output/
         # ax.set_title(f"Sample", fontsize=10)
         ax.axis("off")
 
-    # 关闭未使用的子图
+    # close unusing subplot
     for ax in axes[len(dataset):]:
         ax.axis("off")
 
@@ -215,16 +210,40 @@ def visualize_tensor_graphs_grid(dataset, n_rows=3, n_cols=3, save_path="output/
     plt.close()
     print(f"[✓] 保存整体分子图到 {save_path}")
 
+
+def get_next_graph_dir(base_dir="graph"):
+    # create graph dir
+    if not os.path.exists(base_dir):
+        os.makedirs(base_dir)
+        return os.path.join(base_dir, "0")
+
+    # get all num
+    existing_dirs = [
+        d for d in os.listdir(base_dir)
+        if os.path.isdir(os.path.join(base_dir, d)) and d.isdigit()
+    ]
+
+    if not existing_dirs:
+        next_idx = 0
+    else:
+        # max + 1
+        next_idx = max(int(d) for d in existing_dirs) + 1
+
+    new_dir = os.path.join(base_dir, str(next_idx))
+    os.makedirs(new_dir)
+    return new_dir
+
 # ---------------- Sampling helper ----------------
 @torch.no_grad()
 def sample_and_save(model_path, n=9):
     model = SmallUNet(in_channels=CHANNELS, base_ch=128).to(DEVICE)
-    model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+    model.load_state_dict(torch.load(model_path, map_location=DEVICE, weights_only=True))
     model.eval()
     samples = p_sample_loop(model, (n, CHANNELS, IMAGE_SIZE, IMAGE_SIZE))
     re_dataset = [image_tensor_to_data(img) for img in samples]
-    visualize_tensor_graphs_grid(re_dataset, save_path="output/molgraph/samples/graph_samples/test.png")
-    # utils.save_image((samples + 1)/2.0, os.path.join(SAMPLE_DIR, f"sample_from_{Path(model_path).stem}.png"), nrow=int(math.sqrt(n)))
+    savepath = get_next_graph_dir(SAMPLE_DIR)
+    visualize_tensor_graphs_grid(re_dataset, save_path=os.path.join(savepath, "graph.png"))
+    utils.save_image((samples + 1)/2.0, os.path.join(savepath, f"sample_from_{Path(model_path).stem}.png"), nrow=int(math.sqrt(n)))
     # print(f"Saved samples to {SAMPLE_DIR}")
 
 # ---------------- CLI ----------------

@@ -51,7 +51,7 @@ def read_xyz_file(xyz_path):
         if len(parts) >= 4:
             atoms.append(parts[0])
 
-            # ✅ 处理含 `*^` 的指数格式
+            # 处理含 `*^` 的指数格式
             x = parts[1].replace("*^", "e")
             y = parts[2].replace("*^", "e")
             z = parts[3].replace("*^", "e")
@@ -184,7 +184,7 @@ def image_tensor_to_data(img_tensor, threshold=0.5):
 
     # max_nodes = A.shape[0]
     
-    # ✅ 直接用对角线恢复节点数
+    # 直接用对角线恢复节点数
     diag = torch.diag(X)
     exists = diag > threshold
     num_nodes = int(exists.sum().item())
