@@ -15,9 +15,9 @@ IMAGE_SIZE = 32
 CHANNELS = 3
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-SAVE_DIR = "output/molgraph/weights/checkpoints"
-WEIGHT_DIR = "output/molgraph/weights"
-SAMPLE_DIR = "output/molgraph/samples/graph_samples"
+SAVE_DIR = "../../output/molgraph/weights/checkpoints"
+WEIGHT_DIR = "../../output/molgraph/weights"
+SAMPLE_DIR = "../../output/molgraph/samples/graph_samples"
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(WEIGHT_DIR, exist_ok=True)
 os.makedirs(SAMPLE_DIR, exist_ok=True)

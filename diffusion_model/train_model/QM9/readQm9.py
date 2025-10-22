@@ -11,7 +11,7 @@ from tqdm import tqdm
 # 路径配置
 # -------------------------
 # BZ2_PATH = "data/QM9/Data for 133885 GDB-9 molecules.bz2"
-EXTRACT_DIR = "data/QM9/extracted"
+EXTRACT_DIR = "../../data/QM9/extracted"
 
 # # -------------------------
 # # 解压 bz2 压缩包
@@ -83,7 +83,7 @@ def build_edges_from_coords(coords, atoms, cutoff=1.8):
 # -------------------------
 # 可视化图
 # -------------------------
-def visualize_tensor_graphs_grid(dataset, n_rows=3, n_cols=3, save_path="output/molgraph/molecule_grid.png"):
+def visualize_tensor_graphs_grid(dataset, n_rows=3, n_cols=3, save_path="../../output/molgraph/molecule_grid.png"):
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * 4, n_rows * 4))
     axes = axes.flatten()
@@ -240,9 +240,9 @@ class LocalQM9XYZDataset(InMemoryDataset):
 # 运行示例
 # -------------------------
 if __name__ == "__main__":
-    dataset = LocalQM9XYZDataset(root="data/QM9", limit=50000)
+    dataset = LocalQM9XYZDataset(root="../../data/QM9", limit=50000)
     # save_path = "data/QM9/processed_qm9.pt"
-    save_path = "data/QM9/processed_qm9_5M.pt"
+    save_path = "../../data/QM9/processed_qm9_5M.pt"
     image_tensors = [graph_to_image_tensor(data) for data in dataset]
     torch.save(image_tensors, save_path)
     print(f"[✓] 数据集已保存到 {save_path}")

@@ -26,7 +26,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 
 # ---------------- Config ----------------
-DATA_DIR = "data/QM9/processed_qm9_5M.pt"
+DATA_DIR = "../../data/QM9/processed_qm9_5M.pt"
 IMAGE_SIZE = 32
 CHANNELS = 3
 BATCH_SIZE = 32
@@ -34,8 +34,8 @@ EPOCHS = 100
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-SAVE_DIR = "output/molgraph/weights/checkpoints"
-SAMPLE_DIR = "output/molgraph/samples/last_train"
+SAVE_DIR = "../../output/molgraph/weights/checkpoints"
+SAMPLE_DIR = "../../output/molgraph/samples/last_train"
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(SAMPLE_DIR, exist_ok=True)
 

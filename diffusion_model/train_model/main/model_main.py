@@ -27,7 +27,7 @@ from torchvision import transforms, utils
 from PIL import Image
 
 # ---------------- Config ----------------
-DATA_DIR = "data/CIFAR10"
+DATA_DIR = "../../data/CIFAR10"
 IMAGE_SIZE = 64
 CHANNELS = 3
 BATCH_SIZE = 32
@@ -35,8 +35,8 @@ EPOCHS = 100
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-SAVE_DIR = "checkpoints"
-SAMPLE_DIR = "samples"
+SAVE_DIR = "../../output/general_img_diff/checkpoints"
+SAMPLE_DIR = "../../output/general_img_diff/samples_check"
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(SAMPLE_DIR, exist_ok=True)
 
