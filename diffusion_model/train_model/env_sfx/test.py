@@ -1,19 +1,3 @@
-"""
-DDPM baseline (discrete-time) - PyTorch
-- Dataset: JPG images folder (64x64)
-- Model: U-Net-like network that predicts noise (eps)
-- Noise schedule: linear beta, T=1000
-- Time embedding: sinusoidal
-- Training: MSE on noise (DDPM objective)
-- Sampling: standard DDPM sampling loop
-
-Usage:
-  python ddpm_fixed.py --mode train
-  python ddpm_fixed.py --mode sample --model checkpoints/ddpm_epoch100.pt
-
-This version fixes the continuous-time SDE mistakes and uses the standard DDPM discrete formulas.
-"""
-
 import os
 import math
 from pathlib import Path
@@ -23,23 +7,30 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
+import torchaudio
+import torchaudio.functional as F_audio
+import yaml
+import pandas as pd
+
+from transformers import AutoTokenizer, AutoModel
 
 # ---------------- Config ----------------
-DATA_DIR = "../../data/QM9/processed_qm9_5M.pt"
-IMAGE_SIZE = 32
-CHANNELS = 3
-BATCH_SIZE = 32
-EPOCHS = 100
+DATA_AUDIO_DIR = "../../data/MACS/audio"
+DATA_ANNOTATION = "../../data/MACS/annotations/MACS.yaml"
+N_MELS = 80
+SAMPLE_RATE = 16000
+DURATION = 4  # 秒数
+BATCH_SIZE = 8
+EPOCHS = 50
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-SAVE_DIR = "../../output/molgraph/weights/checkpoints"
-SAMPLE_DIR = "../../output/molgraph/samples/last_train"
+SAVE_DIR = "../../output/sfx/weights"
+SAMPLE_DIR = "../../output/sfx/samples"
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(SAMPLE_DIR, exist_ok=True)
 
-# ---------------- Noise schedule (DDPM discrete) ----------------
+# ---------------- Noise schedule ----------------
 T = 1000
 beta_start = 1e-4
 beta_end = 2e-2
@@ -47,189 +38,222 @@ betas = torch.linspace(beta_start, beta_end, T)
 alphas = 1. - betas
 alphas_cumprod = torch.cumprod(alphas, dim=0)
 alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1,0), value=1.0)
-
 sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
 sqrt_one_minus_alphas_cumprod = torch.sqrt(1. - alphas_cumprod)
 
-# helper to index tensors for a batch of indices t
 def extract(a, t, x_shape):
-    a = a.to(t.device)               # 确保和 t 一致
+    a = a.to(t.device)
     out = a.gather(0, t).float()
     return out.reshape(-1, *((1,) * (len(x_shape) - 1)))
 
-# # ---------------- Dataset ----------------
-# class JPGImageFolder(Dataset):
-#     def __init__(self, folder, image_size=IMAGE_SIZE):
-#         self.files = [p for p in Path(folder).glob("**/*.jpg")] + [p for p in Path(folder).glob("**/*.png")]
-#         assert len(self.files) > 0, f"No images found in {folder}"
-#         self.transform = transforms.Compose([
-#             transforms.Resize((image_size, image_size), interpolation=Image.LANCZOS),
-#             transforms.ToTensor(),
-#             transforms.Normalize([0.5]*CHANNELS, [0.5]*CHANNELS),
-#         ])
-#     def __len__(self):
-#         return len(self.files)
-#     def __getitem__(self, idx):
-#         img = Image.open(self.files[idx]).convert('RGB')
-#         return self.transform(img)
+# ---------------- Dataset ----------------
+class MACSDataset(Dataset):
+    def __init__(self, audio_dir, annotation_file, n_mels=N_MELS, sample_rate=SAMPLE_RATE, duration=DURATION):
+        self.audio_dir = audio_dir
+        self.n_mels = n_mels
+        self.sample_rate = sample_rate
+        self.duration = duration
+        if annotation_file.endswith('.yaml'):
+            with open(annotation_file, 'r') as f:
+                self.annotations = yaml.safe_load(f)
+        else:
+            self.annotations = pd.read_csv(annotation_file)
+        self.audio_files = sorted(os.listdir(audio_dir))
+        self.mel_transform = torchaudio.transforms.MelSpectrogram(
+            sample_rate=sample_rate, n_mels=n_mels, n_fft=1024, hop_length=512
+        )
+
+    def __len__(self):
+        return len(self.audio_files)
+
+    def __getitem__(self, idx):
+        audio_path = os.path.join(self.audio_dir, self.audio_files[idx])
+        waveform, sr = torchaudio.load(audio_path)
+        if sr != self.sample_rate:
+            waveform = torchaudio.functional.resample(waveform, sr, self.sample_rate)
+        num_samples = self.duration * self.sample_rate
+        if waveform.size(1) < num_samples:
+            waveform = F.pad(waveform, (0, num_samples - waveform.size(1)))
+        else:
+            waveform = waveform[:, :num_samples]
+        mel = self.mel_transform(waveform)
+        mel = torch.log1p(mel)
+        if isinstance(self.annotations, list):
+            text = self.annotations[idx]['caption']
+        else:
+            text = self.annotations.iloc[idx]['caption']
+        return mel, text
+
+# ---------------- Text Encoder ----------------
+tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+text_model = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2").to(DEVICE)
+text_model.eval()
+
+def encode_text(text_list):
+    tokens = tokenizer(text_list, return_tensors='pt', padding=True, truncation=True).to(DEVICE)
+    with torch.no_grad():
+        embeddings = text_model(**tokens).last_hidden_state.mean(dim=1)
+    return embeddings  # (B, hidden_dim)
 
 # ---------------- Time embedding ----------------
 def sinusoidal_embedding(timesteps, dim):
-    # timesteps: (B,) values in [0, T)
     device = timesteps.device
     half = dim // 2
     emb = math.log(10000) / (half - 1)
     emb = torch.exp(torch.arange(half, device=device) * -emb)
     emb = timesteps.float().unsqueeze(1) * emb.unsqueeze(0)
     emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
-    if dim % 2 == 1:  # zero pad
+    if dim % 2 == 1:
         emb = F.pad(emb, (0,1,0,0))
     return emb
 
-# ---------------- Model (UNet-like, eps prediction) ----------------
-class ResBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, t_dim=None):
+# ---------------- Model ----------------
+class ResBlockCond(nn.Module):
+    def __init__(self, in_ch, out_ch, t_dim=None, c_dim=None):
         super().__init__()
         self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
         self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1)
         self.norm1 = nn.GroupNorm(8, out_ch)
         self.norm2 = nn.GroupNorm(8, out_ch)
         self.act = nn.SiLU()
-        self.time_proj = nn.Linear(t_dim, out_ch) if t_dim is not None else None
-        if in_ch != out_ch:
-            self.nin_shortcut = nn.Conv2d(in_ch, out_ch, 1)
-        else:
-            self.nin_shortcut = None
-    def forward(self, x, t_emb=None):
+        self.time_proj = nn.Linear(t_dim, out_ch) if t_dim else None
+        self.cond_proj = nn.Linear(c_dim, out_ch) if c_dim else None
+        self.nin_shortcut = nn.Conv2d(in_ch, out_ch, 1) if in_ch != out_ch else None
+
+    def forward(self, x, t_emb=None, c_emb=None):
         h = self.act(self.norm1(self.conv1(x)))
         if self.time_proj is not None and t_emb is not None:
             h = h + self.time_proj(t_emb).unsqueeze(-1).unsqueeze(-1)
+        if self.cond_proj is not None and c_emb is not None:
+            h = h + self.cond_proj(c_emb).unsqueeze(-1).unsqueeze(-1)
         h = self.act(self.norm2(self.conv2(h)))
         if self.nin_shortcut is not None:
             x = self.nin_shortcut(x)
         return x + h
 
-class SmallUNet(nn.Module):
-    def __init__(self, in_channels=3, base_ch=128, t_dim=256):
+class SmallUNetCond(nn.Module):
+    def __init__(self, in_channels=1, base_ch=128, t_dim=256, c_dim=384):
         super().__init__()
-        self.t_dim = t_dim
+        self.t_dim, self.c_dim = t_dim, c_dim
         self.time_mlp = nn.Sequential(nn.Linear(t_dim, t_dim), nn.SiLU(), nn.Linear(t_dim, t_dim))
-        # encoder
-        self.enc1 = ResBlock(in_channels, base_ch, t_dim)
-        self.enc2 = ResBlock(base_ch, base_ch*2, t_dim)
-        self.enc3 = ResBlock(base_ch*2, base_ch*4, t_dim)
-        # middle
-        self.mid = ResBlock(base_ch*4, base_ch*4, t_dim)
-        # decoder
-        self.dec3 = ResBlock(base_ch*8, base_ch*2, t_dim)
-        self.dec2 = ResBlock(base_ch*4, base_ch, t_dim)
-        self.dec1 = ResBlock(base_ch*2, base_ch, t_dim)
+        self.enc1 = ResBlockCond(in_channels, base_ch, t_dim, c_dim)
+        self.enc2 = ResBlockCond(base_ch, base_ch*2, t_dim, c_dim)
+        self.enc3 = ResBlockCond(base_ch*2, base_ch*4, t_dim, c_dim)
+        self.mid = ResBlockCond(base_ch*4, base_ch*4, t_dim, c_dim)
+        self.dec3 = ResBlockCond(base_ch*8, base_ch*2, t_dim, c_dim)
+        self.dec2 = ResBlockCond(base_ch*4, base_ch, t_dim, c_dim)
+        self.dec1 = ResBlockCond(base_ch*2, base_ch, t_dim, c_dim)
         self.out = nn.Conv2d(base_ch, in_channels, 1)
         self.pool = nn.AvgPool2d(2)
         self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
-    def forward(self, x, t):
-        # t: (B,) in [0, T)
+
+    def forward(self, x, t, c_emb):
         t_emb = sinusoidal_embedding(t, self.t_dim)
         t_emb = self.time_mlp(t_emb)
-        e1 = self.enc1(x, t_emb)
-        e2 = self.enc2(self.pool(e1), t_emb)
-        e3 = self.enc3(self.pool(e2), t_emb)
-        m = self.mid(self.pool(e3), t_emb)
+        e1 = self.enc1(x, t_emb, c_emb)
+        e2 = self.enc2(self.pool(e1), t_emb, c_emb)
+        e3 = self.enc3(self.pool(e2), t_emb, c_emb)
+        m = self.mid(self.pool(e3), t_emb, c_emb)
         d3 = self.upsample(m)
-        d3 = self.dec3(torch.cat([d3, e3], dim=1), t_emb)
+        d3 = self.dec3(torch.cat([d3, e3], dim=1), t_emb, c_emb)
         d2 = self.upsample(d3)
-        d2 = self.dec2(torch.cat([d2, e2], dim=1), t_emb)
+        d2 = self.dec2(torch.cat([d2, e2], dim=1), t_emb, c_emb)
         d1 = self.upsample(d2)
-        d1 = self.dec1(torch.cat([d1, e1], dim=1), t_emb)
+        d1 = self.dec1(torch.cat([d1, e1], dim=1), t_emb, c_emb)
         return self.out(d1)
 
-# ---------------- q_sample (forward) ----------------
+# ---------------- Forward / Reverse ----------------
 def q_sample(x_start, t, noise=None):
-    # x_start: (B,C,H,W), t: (B,) indices 0..T-1
     if noise is None:
         noise = torch.randn_like(x_start)
     sqrt_alpha_cumprod_t = extract(sqrt_alphas_cumprod, t, x_start.shape)
     sqrt_one_minus_alpha_cumprod_t = extract(sqrt_one_minus_alphas_cumprod, t, x_start.shape)
     return sqrt_alpha_cumprod_t * x_start + sqrt_one_minus_alpha_cumprod_t * noise
 
-# ---------------- p_sample (reverse) ----------------
-def p_sample(model, x_t, t_index):
-    # t_index is scalar int in [0, T-1]
+def p_sample(model, x_t, t_index, c_emb):
     t = torch.full((x_t.size(0),), t_index, dtype=torch.long, device=x_t.device)
     bet = extract(betas, t, x_t.shape)
     a_t = extract(alphas, t, x_t.shape)
     a_cum = extract(alphas_cumprod, t, x_t.shape)
     sqrt_recip_a = torch.sqrt(1.0 / a_t)
-    # predict noise
-    eps_theta = model(x_t, t)
-    # compute model mean for p(x_{t-1} | x_t)
-    model_mean = (1. / torch.sqrt(a_t)) * (x_t - (bet / torch.sqrt(1. - a_cum)) * eps_theta)
+    eps_theta = model(x_t, t, c_emb)
+    model_mean = (1./torch.sqrt(a_t))*(x_t - (bet/torch.sqrt(1.-a_cum))*eps_theta)
     if t_index == 0:
         return model_mean
     else:
-        var = (bet * (1. - extract(alphas_cumprod_prev, t, x_t.shape)) / (1. - a_cum)).to(x_t.device)
+        var = (bet*(1.-extract(alphas_cumprod_prev,t,x_t.shape))/(1.-a_cum)).to(x_t.device)
         noise = torch.randn_like(x_t)
         return model_mean + torch.sqrt(var) * noise
 
 @torch.no_grad()
-def p_sample_loop(model, shape):
+def p_sample_loop(model, shape, c_emb):
     device = next(model.parameters()).device
-    img = torch.randn(shape, device=device)
+    x = torch.randn(shape, device=device)
     for i in tqdm(reversed(range(T))):
-        img = p_sample(model, img, i)
-    return img
+        x = p_sample(model, x, i, c_emb)
+    return x
 
 # ---------------- Training ----------------
 def train():
-    dataset = torch.load(DATA_DIR)
+    dataset = MACSDataset(DATA_AUDIO_DIR, DATA_ANNOTATION)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
-    model = SmallUNet(in_channels=CHANNELS, base_ch=128).to(DEVICE)
+    model = SmallUNetCond(in_channels=1, base_ch=128, t_dim=256, c_dim=384).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=LR)
-
     global_step = 0
     for epoch in range(EPOCHS):
         pbar = tqdm(loader, desc=f"Epoch {epoch+1}/{EPOCHS}")
-        for batch in pbar:
-            batch = batch.to(DEVICE)
-            bs = batch.size(0)
+        for mel, text in pbar:
+            mel = mel.to(DEVICE)
+            c_emb = encode_text(text)
+            bs = mel.size(0)
             t = torch.randint(0, T, (bs,), device=DEVICE).long()
-            noise = torch.randn_like(batch)
-            x_t = q_sample(batch, t, noise=noise)
-            eps_theta = model(x_t, t)
+            noise = torch.randn_like(mel)
+            x_t = q_sample(mel, t, noise=noise)
+            eps_theta = model(x_t, t, c_emb)
             loss = F.mse_loss(eps_theta, noise)
             opt.zero_grad()
             loss.backward()
             opt.step()
             global_step += 1
             pbar.set_postfix(loss=loss.item())
-
+        # 保存样本
         model.eval()
-        samples = p_sample_loop(model, (16, CHANNELS, IMAGE_SIZE, IMAGE_SIZE))
-        utils.save_image((samples + 1) / 2.0, os.path.join(SAMPLE_DIR, f"sample_epoch{epoch+1}.png"), nrow=4)
+        text_sample = ["city street at night"]*4
+        c_emb = encode_text(text_sample)
+        samples = p_sample_loop(model, (4,1,N_MELS,mel.size(2)), c_emb)
+        for i, s in enumerate(samples):
+            waveform = F_audio.griffinlim(torch.expm1(s.squeeze(0)), n_fft=1024, hop_length=512)
+            torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_epoch{epoch+1}_{i}.wav"), waveform.unsqueeze(0), SAMPLE_RATE)
+        torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_epoch{epoch+1}.pt"))
         model.train()
 
-        if ((epoch+1) % (EPOCHS / 10) == 0 if EPOCHS >= 10 else True):
-            torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_epoch{epoch+1}.pt"))
-
-# ---------------- Sampling helper ----------------
+# ---------------- Sampling ----------------
 @torch.no_grad()
-def sample_and_save(model_path, n=16):
-    model = SmallUNet(in_channels=CHANNELS, base_ch=128).to(DEVICE)
-    model.load_state_dict(torch.load(model_path, map_location=DEVICE, weights_only=True))
+def sample(model_path, text, n=1, mel_len=256):
+    model = SmallUNetCond(in_channels=1, base_ch=128, t_dim=256, c_dim=384).to(DEVICE)
+    model.load_state_dict(torch.load(model_path, map_location=DEVICE))
     model.eval()
-    samples = p_sample_loop(model, (n, CHANNELS, IMAGE_SIZE, IMAGE_SIZE))
-    utils.save_image((samples + 1)/2.0, os.path.join(SAMPLE_DIR, f"sample_from_{Path(model_path).stem}.png"), nrow=int(math.sqrt(n)))
-    print(f"Saved samples to {SAMPLE_DIR}")
+    c_emb = encode_text([text]*n)
+    samples = p_sample_loop(model, (n,1,N_MELS,mel_len), c_emb)
+    waveforms = []
+    for s in samples:
+        waveform = F_audio.griffinlim(torch.expm1(s.squeeze(0)), n_fft=1024, hop_length=512)
+        waveforms.append(waveform)
+    return waveforms
 
 # ---------------- CLI ----------------
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', choices=['train','sample'], default='train')
     parser.add_argument('--model', type=str, default='')
+    parser.add_argument('--text', type=str, default='a city street at night')
     args = parser.parse_args()
     if args.mode == 'train':
         train()
     else:
         assert args.model
-        sample_and_save(args.model)
+        waveforms = sample(args.model, args.text, n=1)
+        for i,wf in enumerate(waveforms):
+            torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_{i}.wav"), wf.unsqueeze(0), SAMPLE_RATE)
+        print(f"Saved sample audio to {SAMPLE_DIR}")

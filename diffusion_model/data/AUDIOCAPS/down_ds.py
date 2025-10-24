@@ -1,5 +1,5 @@
 import os
-from datasets import load_dataset
+from datasets import load_dataset, Audio
 import torchaudio
 import torch
 import numpy as np
@@ -31,35 +31,36 @@ def save_mel_item(split, idx, mel):
     torch.save(mel.cpu(), save_path)
 
 # ---------------- Process one dataset ----------------
-def process_split(split_name,limit=100):
+def process_split(split_name, limit=100):
     print(f"🔹 Processing split: {split_name}")
-    ds = load_dataset("jp1924/AudioCaps", split=split_name, cache_dir="./cache", streaming=True,features=None)
-
+    
+    # 加载数据集并指定音频解码后端
+    ds = load_dataset("jp1924/AudioCaps", split=split_name, cache_dir="./cache", streaming=True)
+    ds = ds.cast_column("audio", Audio(decode_with="librosa"))
+    
     save_dir = os.path.join(SAVE_ROOT, split_name)
     os.makedirs(save_dir, exist_ok=True)
-
+    
     for i, item in enumerate(tqdm(ds, desc=f"{split_name}")):
         if i >= limit:
             break
         save_path = os.path.join(save_dir, f"{i:06d}.pt")
         if os.path.exists(save_path):
-            continue  # skip processed
-
+            continue
+            
         try:
-            audio_path = item["audio"]["path"]
-            if not os.path.exists(audio_path):
-                waveform, sr = torchaudio.load(audio_path)
-            else:
-                waveform, sr = torchaudio.load(audio_path)
-
+            audio = item["audio"]
+            waveform = torch.tensor(audio["array"]).float()
+            sr = audio["sampling_rate"]
+            
             # 重采样
             if sr != SAMPLE_RATE:
                 resampler = torchaudio.transforms.Resample(sr, SAMPLE_RATE)
                 waveform = resampler(waveform)
-
+            
             if waveform.ndim > 1:
                 waveform = waveform.mean(dim=0, keepdim=True)  # 单声道化
-
+                
             waveform = waveform.to(DEVICE)
             mel = mel_transform(waveform)
             mel = torch.log(mel + 1e-6)  # log-mel
