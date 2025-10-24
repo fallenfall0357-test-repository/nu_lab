@@ -53,21 +53,21 @@ class MACSDataset(Dataset):
         self.n_mels = n_mels
         self.sample_rate = sample_rate
         self.duration = duration
-        if annotation_file.endswith('.yaml'):
-            with open(annotation_file, 'r') as f:
-                self.annotations = yaml.safe_load(f)
-        else:
-            self.annotations = pd.read_csv(annotation_file)
-        self.audio_files = sorted(os.listdir(audio_dir))
+        with open(annotation_file, 'r') as f:
+            data = yaml.safe_load(f)
+        # 提取文件列表
+        self.files = data['files']  # list of dict
+        
         self.mel_transform = torchaudio.transforms.MelSpectrogram(
             sample_rate=sample_rate, n_mels=n_mels, n_fft=1024, hop_length=512
         )
 
     def __len__(self):
-        return len(self.audio_files)
+        return len(self.files)
 
     def __getitem__(self, idx):
-        audio_path = os.path.join(self.audio_dir, self.audio_files[idx])
+        file_info = self.files[idx]
+        audio_path = os.path.join(self.audio_dir, file_info['filename'])
         waveform, sr = torchaudio.load(audio_path)
         if sr != self.sample_rate:
             waveform = torchaudio.functional.resample(waveform, sr, self.sample_rate)
@@ -78,11 +78,14 @@ class MACSDataset(Dataset):
             waveform = waveform[:, :num_samples]
         mel = self.mel_transform(waveform)
         mel = torch.log1p(mel)
-        if isinstance(self.annotations, list):
-            text = self.annotations[idx]['caption']
+        
+        # 随机选择一个 annotator 的 sentence
+        if 'annotations' in file_info and len(file_info['annotations']) > 0:
+            sentence = file_info['annotations'][torch.randint(0, len(file_info['annotations']), (1,)).item()]['sentence']
         else:
-            text = self.annotations.iloc[idx]['caption']
-        return mel, text
+            sentence = ""  # 没有注释就空字符串
+        
+        return mel, sentence
 
 # ---------------- Text Encoder ----------------
 tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
