@@ -139,6 +139,18 @@ class ResBlockCond(nn.Module):
             x = self.nin_shortcut(x)
         return x + h
 
+def align_and_cat(dec_feat, enc_feat):
+    _, _, h1, w1 = dec_feat.shape
+    _, _, h2, w2 = enc_feat.shape
+
+    if h1 > h2 or w1 > w2:
+        dh = (h1 - h2) // 2
+        dw = (w1 - w2) // 2
+        dec_feat = dec_feat[:, :, dh:dh+h2, dw:dw+w2]
+    elif h1 < h2 or w1 < w2:
+        dec_feat = F.interpolate(dec_feat, size=(h2,w2),mode='bilinear',align_corners=False)
+    return torch.cat([dec_feat,enc_feat],dim=1)
+
 class SmallUNetCond(nn.Module):
     def __init__(self, in_channels=1, base_ch=128, t_dim=256, c_dim=384):
         super().__init__()
@@ -172,16 +184,16 @@ class SmallUNetCond(nn.Module):
         m = self.mid(self.pool(e3), t_emb, c_emb)
 
         d3 = self.upsample(m)
-        d3 = center_crop(d3, e3)
-        d3 = self.dec3(torch.cat([d3, e3], dim=1), t_emb, c_emb)
+        #d3 = center_crop(d3, e3)
+        d3 = self.dec3(align_and_cat(d3,e3), t_emb, c_emb)
 
         d2 = self.upsample(d3)
-        d2 = center_crop(d2, e2)
-        d2 = self.dec2(torch.cat([d2, e2], dim=1), t_emb, c_emb)
+        #d2 = center_crop(d2, e2)
+        d2 = self.dec2(align_and_cat(d2,e2), t_emb, c_emb)
 
         d1 = self.upsample(d2)
-        d1 = center_crop(d1, e1)
-        d1 = self.dec1(torch.cat([d1, e1], dim=1), t_emb, c_emb)
+        #d1 = center_crop(d1, e1)
+        d1 = self.dec1(align_and_cat(d1,e1), t_emb, c_emb)
 
         return self.out(d1)
 
