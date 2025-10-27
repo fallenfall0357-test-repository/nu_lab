@@ -4,8 +4,8 @@ from test import MACSDataset  # 如果类定义在 test.py 中
 from tqdm import tqdm
 
 # === 配置 ===
-AUDIO_DIR = "./MACS_audio"      # 你音频所在目录
-ANNOTATION_FILE = "./MACS.yaml" # 你 YAML 标注文件路径
+AUDIO_DIR = "../../data/MACS/audio"      # 你音频所在目录
+ANNOTATION_FILE = "../../data/MACS/annotations/MACS.yaml" # 你 YAML 标注文件路径
 BATCH_SIZE = 1                  # 统计时不用大batch
 N_SAMPLES = None                # 如果只想看前100条就设为100
 
