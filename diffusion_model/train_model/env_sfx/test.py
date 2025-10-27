@@ -258,8 +258,10 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
         sample_rate=sample_rate
     ).to(mel_spec.device)
     spec = mel_inv(mel_spec)
-    spec = spec[..., :spec.size(-1) - (spec.size(-1) % 2)]
     
+    if spec.size(-1) % 2 != 0:
+        spec = spec[..., :-1]
+
     # 3. Griffin-Lim 重建波形
     window = torch.hann_window(n_fft).to(mel_spec.device)
     waveform = F_audio.griffinlim(
