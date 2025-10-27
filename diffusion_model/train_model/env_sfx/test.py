@@ -310,7 +310,7 @@ def train():
         samples = p_sample_loop(model, (4,1,N_MELS,mel.size(2)), c_emb)
         for i, s in enumerate(samples):
             waveform = mel_to_audio(s)
-            torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_epoch{epoch+1}_{i}.wav"), waveform.unsqueeze(0), SAMPLE_RATE)
+            torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_epoch{epoch+1}_{i}.wav"), waveform.unsqueeze(0).cpu(), SAMPLE_RATE)
         torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_epoch{epoch+1}.pt"))
         model.train()
 
@@ -342,5 +342,5 @@ if __name__ == "__main__":
         assert args.model
         waveforms = sample(args.model, args.text, n=1)
         for i,wf in enumerate(waveforms):
-            torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_{i}.wav"), wf.unsqueeze(0), SAMPLE_RATE)
+            torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_{i}.wav"), wf.unsqueeze(0).cpu(), SAMPLE_RATE)
         print(f"Saved sample audio to {SAMPLE_DIR}")
