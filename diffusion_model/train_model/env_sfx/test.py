@@ -22,7 +22,7 @@ N_MELS = 80
 SAMPLE_RATE = 16000
 DURATION = 4  # 秒数
 BATCH_SIZE = 8
-EPOCHS = 50
+EPOCHS = 10
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -249,22 +249,19 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
     """
     mel_spec: [1, 80, T] tensor (log-mel)
     """
-    # 1. 反 log
-    mel_spec = torch.expm1(mel_spec.squeeze(0))  # [80, T]
+    mel_spec = torch.expm1(mel_spec.squeeze(0))
+    mel_spec = mel_spec.clamp(min=1e-5) * 10.0  # 放大能量
 
-    # 2. Mel -> 线性频谱
-    invmel = torchaudio.transforms.InverseMelScale(
+    mel_inv = torchaudio.transforms.InverseMelScale(
         n_stft=n_fft // 2 + 1,
         n_mels=80,
         sample_rate=sample_rate
     ).to(mel_spec.device)
-    spec = invmel(mel_spec)  # [513, T]
+    spec = mel_inv(mel_spec)
 
-    # --- 🔧 关键修复：确保维度正确 ---
-    spec = spec[: n_fft // 2 + 1, :]  # 修剪多余频率
-    spec = spec.contiguous()
+    if spec.size(-1) % 2 != 0:
+        spec = spec[..., :-1]
 
-    # 3. Griffin-Lim 重建波形
     window = torch.hann_window(n_fft).to(mel_spec.device)
     waveform = F_audio.griffinlim(
         spec,
@@ -275,11 +272,12 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
         power=1.0,
         n_iter=n_iter,
         momentum=0.99,
-        length=hop_length * (spec.size(-1) - 1),
+        length=(mel_spec.size(-1) - 1) * hop_length,
         rand_init=True,
     )
 
-    return waveform
+    waveform = waveform / waveform.abs().max()  # 归一化音量
+    return waveform.cpu()
 
 # ---------------- Training ----------------
 def train():
@@ -306,12 +304,12 @@ def train():
             pbar.set_postfix(loss=loss.item())
         # 保存样本
         model.eval()
-        text_sample = ["city street at night"]*4
+        text_sample = ["city street at night"]*2
         c_emb = encode_text(text_sample)
         samples = p_sample_loop(model, (4,1,N_MELS,mel.size(2)), c_emb)
         for i, s in enumerate(samples):
             waveform = mel_to_audio(s)
-            torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_epoch{epoch+1}_{i}.wav"), waveform.unsqueeze(0).cpu(), SAMPLE_RATE)
+            torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_epoch{epoch+1}_{i}.wav"), waveform.unsqueeze(0), SAMPLE_RATE)
         torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_epoch{epoch+1}.pt"))
         model.train()
 
@@ -343,5 +341,5 @@ if __name__ == "__main__":
         assert args.model
         waveforms = sample(args.model, args.text, n=1)
         for i,wf in enumerate(waveforms):
-            torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_{i}.wav"), wf.unsqueeze(0).cpu(), SAMPLE_RATE)
+            torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_{i}.wav"), wf.unsqueeze(0), SAMPLE_RATE)
         print(f"Saved sample audio to {SAMPLE_DIR}")
