@@ -25,6 +25,7 @@ BATCH_SIZE = 8
 EPOCHS = 10
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+SAMPLE_COUNT = 2
 
 SAVE_DIR = "../../output/sfx/weights"
 SAMPLE_DIR = "../../output/sfx/samples"
@@ -304,9 +305,9 @@ def train():
             pbar.set_postfix(loss=loss.item())
         # 保存样本
         model.eval()
-        text_sample = ["city street at night"]*2
+        text_sample = ["city street at night"]*SAMPLE_COUNT
         c_emb = encode_text(text_sample)
-        samples = p_sample_loop(model, (4,1,N_MELS,mel.size(2)), c_emb)
+        samples = p_sample_loop(model, (SAMPLE_COUNT,1,N_MELS,mel.size(2)), c_emb)
         for i, s in enumerate(samples):
             waveform = mel_to_audio(s)
             torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_epoch{epoch+1}_{i}.wav"), waveform.unsqueeze(0), SAMPLE_RATE)
