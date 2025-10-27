@@ -309,6 +309,7 @@ def train():
         c_emb = encode_text(text_sample)
         samples = p_sample_loop(model, (SAMPLE_COUNT,1,N_MELS,mel.size(2)), c_emb)
         for i, s in enumerate(samples):
+            print("Generated mel shape:", s.shape)
             waveform = mel_to_audio(s)
             torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_epoch{epoch+1}_{i}.wav"), waveform.unsqueeze(0), SAMPLE_RATE)
         torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_epoch{epoch+1}.pt"))
