@@ -243,6 +243,23 @@ def p_sample_loop(model, shape, c_emb):
         x = p_sample(model, x, i, c_emb)
     return x
 
+@torch.no_grad()
+def mel_to_audio(mel_spec, n_fft=1024, hop_length=512, n_iter=32):
+    mel_spec = torch.expm1(mel_spec.squeeze(0))
+    window = torch.hann_window(n_fft).to(mel_spec.device)
+    return F_audio.griffinlim(
+        mel_spec,
+        window=window,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        win_length=n_fft,
+        power=1.0,
+        n_iter=n_iter,
+        momentum=0.99,
+        length=mel_spec.size(-1) * hop_length,
+        rand_init=True,
+    )
+
 # ---------------- Training ----------------
 def train():
     dataset = MACSDataset(DATA_AUDIO_DIR, DATA_ANNOTATION)
@@ -272,26 +289,10 @@ def train():
         c_emb = encode_text(text_sample)
         samples = p_sample_loop(model, (4,1,N_MELS,mel.size(2)), c_emb)
         for i, s in enumerate(samples):
-            waveform = F_audio.griffinlim(torch.expm1(s.squeeze(0)), n_fft=1024, hop_length=512)
+            waveform = mel_to_audio(s)
             torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_epoch{epoch+1}_{i}.wav"), waveform.unsqueeze(0), SAMPLE_RATE)
         torch.save(model.state_dict(), os.path.join(SAVE_DIR, f"ddpm_epoch{epoch+1}.pt"))
         model.train()
-
-def mel_to_audio(mel_spec, n_fft=1024, hop_length=512, n_iter=32):
-    mel_spec = torch.expm1(mel_spec.squeeze(0))
-    window = torch.hann_window(n_fft).to(mel_spec.device)
-    return F_audio.griffinlim(
-        mel_spec,
-        window=window,
-        n_fft=n_fft,
-        hop_length=hop_length,
-        win_length=n_fft,
-        power=1.0,
-        n_iter=n_iter,
-        momentum=0.99,
-        length=mel_spec.size(-1) * hop_length,
-        rand_init=True,
-    )
 
 # ---------------- Sampling ----------------
 @torch.no_grad()
