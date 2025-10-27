@@ -69,7 +69,7 @@ class MACSDataset(Dataset):
         file_info = self.files[idx]
         audio_path = os.path.join(self.audio_dir, file_info['filename'])
         waveform, sr = torchaudio.load(audio_path)
-        
+
         # 🔧 转单声道
         if waveform.size(0) > 1:
             waveform = waveform.mean(dim=0, keepdim=True)
@@ -155,20 +155,49 @@ class SmallUNetCond(nn.Module):
         self.pool = nn.AvgPool2d(2)
         self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
 
-    def forward(self, x, t, c_emb):
+    def center_crop(tensor, target):
+        _, _, h, w = tensor.shape
+        _, _, th, tw = target.shape
+        dh = (h - th) // 2
+        dw = (w - tw) // 2
+        return tensor[:, :, dh:dh+th, dw:dw+tw]
+
+    def forward(self, x, t, c_emb=None):
         t_emb = sinusoidal_embedding(t, self.t_dim)
         t_emb = self.time_mlp(t_emb)
         e1 = self.enc1(x, t_emb, c_emb)
         e2 = self.enc2(self.pool(e1), t_emb, c_emb)
         e3 = self.enc3(self.pool(e2), t_emb, c_emb)
         m = self.mid(self.pool(e3), t_emb, c_emb)
+
         d3 = self.upsample(m)
+        d3 = self.center_crop(d3, e3)
         d3 = self.dec3(torch.cat([d3, e3], dim=1), t_emb, c_emb)
+
         d2 = self.upsample(d3)
+        d2 = self.center_crop(d2, e2)
         d2 = self.dec2(torch.cat([d2, e2], dim=1), t_emb, c_emb)
+
         d1 = self.upsample(d2)
+        d1 = self.center_crop(d1, e1)
         d1 = self.dec1(torch.cat([d1, e1], dim=1), t_emb, c_emb)
+
         return self.out(d1)
+
+    # def forward(self, x, t, c_emb):
+    #     t_emb = sinusoidal_embedding(t, self.t_dim)
+    #     t_emb = self.time_mlp(t_emb)
+    #     e1 = self.enc1(x, t_emb, c_emb)
+    #     e2 = self.enc2(self.pool(e1), t_emb, c_emb)
+    #     e3 = self.enc3(self.pool(e2), t_emb, c_emb)
+    #     m = self.mid(self.pool(e3), t_emb, c_emb)
+    #     d3 = self.upsample(m)
+    #     d3 = self.dec3(torch.cat([d3, e3], dim=1), t_emb, c_emb)
+    #     d2 = self.upsample(d3)
+    #     d2 = self.dec2(torch.cat([d2, e2], dim=1), t_emb, c_emb)
+    #     d1 = self.upsample(d2)
+    #     d1 = self.dec1(torch.cat([d1, e1], dim=1), t_emb, c_emb)
+    #     return self.out(d1)
 
 # ---------------- Forward / Reverse ----------------
 def q_sample(x_start, t, noise=None):
