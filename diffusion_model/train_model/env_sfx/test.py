@@ -1,4 +1,5 @@
 import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import math
 from pathlib import Path
 from tqdm import tqdm
