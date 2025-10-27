@@ -244,11 +244,25 @@ def p_sample_loop(model, shape, c_emb):
     return x
 
 @torch.no_grad()
-def mel_to_audio(mel_spec, n_fft=1024, hop_length=512, n_iter=32):
+def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter=32):
+    """
+    mel_spec: [1, 80, T] tensor (log-mel)
+    """
+    # 1. 反 log
     mel_spec = torch.expm1(mel_spec.squeeze(0))
+
+    # 2. Mel -> 线性频谱
+    mel_inv = torchaudio.transforms.InverseMelScale(
+        n_stft=n_fft // 2 + 1,
+        n_mels=80,
+        sample_rate=sample_rate
+    ).to(mel_spec.device)
+    spec = mel_inv(mel_spec)
+
+    # 3. Griffin-Lim 重建波形
     window = torch.hann_window(n_fft).to(mel_spec.device)
-    return F_audio.griffinlim(
-        mel_spec,
+    waveform = F_audio.griffinlim(
+        spec,
         window=window,
         n_fft=n_fft,
         hop_length=hop_length,
@@ -256,9 +270,10 @@ def mel_to_audio(mel_spec, n_fft=1024, hop_length=512, n_iter=32):
         power=1.0,
         n_iter=n_iter,
         momentum=0.99,
-        length=mel_spec.size(-1) * hop_length,
+        length=spec.size(-1) * hop_length,
         rand_init=True,
     )
+    return waveform
 
 # ---------------- Training ----------------
 def train():
