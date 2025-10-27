@@ -169,12 +169,12 @@ class SmallUNetCond(nn.Module):
 
     def forward(self, x, t, c_emb=None):
 
-        def center_crop(tensor, target):
-            _, _, h, w = tensor.shape
-            _, _, th, tw = target.shape
-            dh = (h - th) // 2
-            dw = (w - tw) // 2
-            return tensor[:, :, dh:dh+th, dw:dw+tw]
+        # def center_crop(tensor, target):
+        #     _, _, h, w = tensor.shape
+        #     _, _, th, tw = target.shape
+        #     dh = (h - th) // 2
+        #     dw = (w - tw) // 2
+        #     return tensor[:, :, dh:dh+th, dw:dw+tw]
         
         t_emb = sinusoidal_embedding(t, self.t_dim)
         t_emb = self.time_mlp(t_emb)
