@@ -69,6 +69,11 @@ class MACSDataset(Dataset):
         file_info = self.files[idx]
         audio_path = os.path.join(self.audio_dir, file_info['filename'])
         waveform, sr = torchaudio.load(audio_path)
+        
+        # 🔧 转单声道
+        if waveform.size(0) > 1:
+            waveform = waveform.mean(dim=0, keepdim=True)
+
         if sr != self.sample_rate:
             waveform = torchaudio.functional.resample(waveform, sr, self.sample_rate)
         num_samples = self.duration * self.sample_rate
