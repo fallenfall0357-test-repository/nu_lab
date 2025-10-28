@@ -191,21 +191,6 @@ class SmallUNetCond(nn.Module):
 
         return out
 
-    # def forward(self, x, t, c_emb):
-    #     t_emb = sinusoidal_embedding(t, self.t_dim)
-    #     t_emb = self.time_mlp(t_emb)
-    #     e1 = self.enc1(x, t_emb, c_emb)
-    #     e2 = self.enc2(self.pool(e1), t_emb, c_emb)
-    #     e3 = self.enc3(self.pool(e2), t_emb, c_emb)
-    #     m = self.mid(self.pool(e3), t_emb, c_emb)
-    #     d3 = self.upsample(m)
-    #     d3 = self.dec3(torch.cat([d3, e3], dim=1), t_emb, c_emb)
-    #     d2 = self.upsample(d3)
-    #     d2 = self.dec2(torch.cat([d2, e2], dim=1), t_emb, c_emb)
-    #     d1 = self.upsample(d2)
-    #     d1 = self.dec1(torch.cat([d1, e1], dim=1), t_emb, c_emb)
-    #     return self.out(d1)
-
 # ---------------- Forward / Reverse ----------------
 def q_sample(x_start, t, noise=None):
     if noise is None:
@@ -244,7 +229,7 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
     """
     mel_spec = torch.expm1(mel_spec.squeeze(0))
     mel_spec = mel_spec.clamp(min=1e-5) * 10.0  # 放大能量
-    print(mel_spec.size(-1))
+    # print(mel_spec.size(-1))
 
     mel_inv = torchaudio.transforms.InverseMelScale(
         n_stft=n_fft // 2 + 1,
@@ -257,13 +242,13 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
     # print(spec.size(-1))
     # if spec.size(-1) % 2 != 0:
     #     spec = spec[..., :-1]
-    print(spec.size(-1))
+    # print(spec.size(-1))
     # 自动计算音频长度
     # 对于 STFT：num_frames = 1 + (num_samples - n_fft) // hop_length
     # → num_samples ≈ (num_frames - 1) * hop_length + n_fft
     # length = (spec.size(-1) - 1) * hop_length + n_fft
     length = DURATION * SAMPLE_RATE
-    print(length)
+    # print(length)
 
     window = torch.hann_window(n_fft).to(mel_spec.device)
     waveform = F_audio.griffinlim(
