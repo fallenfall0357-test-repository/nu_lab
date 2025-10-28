@@ -69,7 +69,10 @@ class MACSDataset(Dataset):
 
     def __getitem__(self, idx):
         file_info = self.files[idx]
-        audio_path = os.path.join(self.audio_dir, file_info['filename'])
+        # audio_path = os.path.join(self.audio_dir, file_info['filename'])
+        audio_path = Path(self.audio_dir) / file_info['filename']
+        audio_path = audio_path.resolve()
+
         waveform, sr = torchaudio.load(audio_path)
 
         # 🔧 转单声道
