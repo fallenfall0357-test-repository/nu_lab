@@ -252,9 +252,14 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
     ).to(mel_spec.device)
     spec = mel_inv(mel_spec)
 
-    # 如果最后一帧是奇数，去掉以防 mismatch
+    # 保证频谱时间长度为偶数
     if spec.size(-1) % 2 != 0:
         spec = spec[..., :-1]
+
+    # 自动计算音频长度
+    # 对于 STFT：num_frames = 1 + (num_samples - n_fft) // hop_length
+    # → num_samples ≈ (num_frames - 1) * hop_length + n_fft
+    length = (spec.size(-1) - 1) * hop_length + n_fft
 
     window = torch.hann_window(n_fft).to(mel_spec.device)
     waveform = F_audio.griffinlim(
@@ -266,7 +271,7 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
         power=1.0,
         n_iter=n_iter,
         momentum=0.99,
-        # ❌ 删除 length 参数
+        length=length,  # ✅ 自动推算
         rand_init=True,
     )
 
