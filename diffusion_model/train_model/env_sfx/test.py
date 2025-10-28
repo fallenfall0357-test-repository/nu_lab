@@ -265,7 +265,7 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
         power=1.0,
         n_iter=n_iter,
         momentum=0.99,
-        length=(mel_spec.size(-1) - 1) * hop_length,
+        length=mel_spec.size(-1) * hop_length,
         rand_init=True,
     )
 
