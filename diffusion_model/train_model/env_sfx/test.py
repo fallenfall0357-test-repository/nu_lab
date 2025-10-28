@@ -183,7 +183,13 @@ class SmallUNetCond(nn.Module):
         d1 = self.upsample(d2)
         d1 = self.dec1(align_and_cat(d1,e1), t_emb, c_emb)
 
-        return self.out(d1)
+        out = self.out(d1)
+
+        if out.shape[-2:] != x.shape[-2:]:
+            out = F.interpolate(out, size=x.shape[-2:], mode="bilinear", align_corners=False)
+
+
+        return out
 
     # def forward(self, x, t, c_emb):
     #     t_emb = sinusoidal_embedding(t, self.t_dim)
