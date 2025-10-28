@@ -253,6 +253,7 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
     spec = mel_inv(mel_spec)
 
     # 保证频谱时间长度为偶数
+    print(spec.size(-1))
     if spec.size(-1) % 2 != 0:
         spec = spec[..., :-1]
 
@@ -260,6 +261,7 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
     # 对于 STFT：num_frames = 1 + (num_samples - n_fft) // hop_length
     # → num_samples ≈ (num_frames - 1) * hop_length + n_fft
     length = (spec.size(-1) - 1) * hop_length + n_fft
+    print(length)
 
     window = torch.hann_window(n_fft).to(mel_spec.device)
     waveform = F_audio.griffinlim(
