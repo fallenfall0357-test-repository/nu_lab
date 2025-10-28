@@ -310,7 +310,7 @@ def train():
         model.eval()
         text_sample = ["city street at night"]*SAMPLE_COUNT
         c_emb = encode_text(text_sample)
-        samples = p_sample_loop(model, (SAMPLE_COUNT,1,N_MELS,mel.size(2)), c_emb)
+        samples = p_sample_loop(model, (SAMPLE_COUNT,1,N_MELS,mel.size(3)), c_emb)
         for i, s in enumerate(samples):
             print("Generated mel shape:", s.shape)
             waveform = mel_to_audio(s)
