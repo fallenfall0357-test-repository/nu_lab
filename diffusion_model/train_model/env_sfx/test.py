@@ -241,10 +241,13 @@ def p_sample_loop(model, shape, c_emb):
 def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter=32):
     """
     mel_spec: [1, 80, T] tensor (log-mel)
+    输出: waveform [L]
     """
-    mel_spec = torch.expm1(mel_spec.squeeze(0))
-    mel_spec = mel_spec.clamp(min=1e-5) * 10.0  # 放大能量
+    # ---- 1. 反log ----
+    mel_spec = torch.expm1(mel_spec.squeeze(0))  # [80, T]
+    mel_spec = mel_spec.clamp(min=1e-5) * 10.0  # 放大一点能量
 
+    # ---- 2. Mel -> 线性频谱 ----
     mel_inv = torchaudio.transforms.InverseMelScale(
         n_stft=n_fft // 2 + 1,
         n_mels=80,
@@ -252,9 +255,18 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
     ).to(mel_spec.device)
     spec = mel_inv(mel_spec)
 
+    # ---- 3. 保证时间帧可被 Griffin-Lim 处理 ----
+    # Griffin-Lim 期望 spec.shape[-1] 对应的帧数与 hop_length 对齐
     if spec.size(-1) % 2 != 0:
         spec = spec[..., :-1]
 
+    # ---- 4. 计算目标音频长度 ----
+    # STFT 帧数公式: frames = floor((L - n_fft)/hop) + 1
+    # 反推 L ≈ (frames - 1) * hop + n_fft
+    n_frames = spec.size(-1)
+    target_len = (n_frames - 1) * hop_length + n_fft
+
+    # ---- 5. Griffin-Lim 重建 ----
     window = torch.hann_window(n_fft).to(mel_spec.device)
     waveform = F_audio.griffinlim(
         spec,
@@ -265,12 +277,48 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
         power=1.0,
         n_iter=n_iter,
         momentum=0.99,
-        length=mel_spec.size(-1) * hop_length,
+        length=target_len,   # ✅ 这里用推算出的长度，而不是 mel_spec.size(-1)
         rand_init=True,
     )
 
-    waveform = waveform / waveform.abs().max()  # 归一化音量
+    # ---- 6. 归一化 ----
+    waveform = waveform / waveform.abs().max().clamp_min(1e-6)
     return waveform.cpu()
+
+# @torch.no_grad()
+# def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter=32):
+#     """
+#     mel_spec: [1, 80, T] tensor (log-mel)
+#     """
+#     mel_spec = torch.expm1(mel_spec.squeeze(0))
+#     mel_spec = mel_spec.clamp(min=1e-5) * 10.0  # 放大能量
+
+#     mel_inv = torchaudio.transforms.InverseMelScale(
+#         n_stft=n_fft // 2 + 1,
+#         n_mels=80,
+#         sample_rate=sample_rate
+#     ).to(mel_spec.device)
+#     spec = mel_inv(mel_spec)
+
+#     if spec.size(-1) % 2 != 0:
+#         spec = spec[..., :-1]
+
+#     window = torch.hann_window(n_fft).to(mel_spec.device)
+#     waveform = F_audio.griffinlim(
+#         spec,
+#         window=window,
+#         n_fft=n_fft,
+#         hop_length=hop_length,
+#         win_length=n_fft,
+#         power=1.0,
+#         n_iter=n_iter,
+#         momentum=0.99,
+#         length=(mel_spec.size(-1) - 1) * hop_length,
+#         rand_init=True,
+#     )
+
+#     waveform = waveform / waveform.abs().max()  # 归一化音量
+#     return waveform.cpu()
 
 # ---------------- Training ----------------
 def train():
