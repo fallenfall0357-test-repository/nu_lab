@@ -244,6 +244,7 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
     """
     mel_spec = torch.expm1(mel_spec.squeeze(0))
     mel_spec = mel_spec.clamp(min=1e-5) * 10.0  # 放大能量
+    print(mel_spec)
 
     mel_inv = torchaudio.transforms.InverseMelScale(
         n_stft=n_fft // 2 + 1,
@@ -253,7 +254,7 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
     spec = mel_inv(mel_spec)
 
     # 保证频谱时间长度为偶数
-    print(spec.size(-1))
+    print(spec.size)
     if spec.size(-1) % 2 != 0:
         spec = spec[..., :-1]
 
