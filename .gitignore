@@ -8,3 +8,4 @@ diffusion_model/data/QM9/processed_qm9_2M.pt
 diffusion_model/data/**/*.wav
 diffusion_model/data/**/*.zip
 diffusion_model/train_model/env_sfx/__pycache__/test.cpython-310.pyc
+*.pt

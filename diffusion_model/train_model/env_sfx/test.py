@@ -29,8 +29,10 @@ SAMPLE_COUNT = 2
 
 SAVE_DIR = "../../output/sfx/weights"
 SAMPLE_DIR = "../../output/sfx/samples"
+MODELGEN_DIR = "../../output/sfx/test"
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(SAMPLE_DIR, exist_ok=True)
+os.makedirs(MODELGEN_DIR, exist_ok=True)
 
 # ---------------- Noise schedule ----------------
 T = 1000
@@ -339,7 +341,7 @@ def train():
 
 # ---------------- Sampling ----------------
 @torch.no_grad()
-def sample(model_path, text, n=1, mel_len=256):
+def sample(model_path, text, n=1, mel_len=313):
     model = SmallUNetCond(in_channels=1, base_ch=128, t_dim=256, c_dim=384).to(DEVICE)
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
     model.eval()
@@ -363,7 +365,9 @@ if __name__ == "__main__":
         train()
     else:
         assert args.model
-        waveforms = sample(args.model, args.text, n=1)
+        model_path = os.path.join(SAVE_DIR,args.model)
+        waveforms = sample(model_path, args.text, n=1)
+        sample_text = args.text.replace(" ", "_")
         for i,wf in enumerate(waveforms):
-            torchaudio.save(os.path.join(SAMPLE_DIR,f"sample_{i}.wav"), wf.unsqueeze(0), SAMPLE_RATE)
-        print(f"Saved sample audio to {SAMPLE_DIR}")
+            torchaudio.save(os.path.join(MODELGEN_DIR,f"sample_{sample_text}_{i}.wav"), wf.unsqueeze(0), SAMPLE_RATE)
+        print(f"Saved sample audio to {MODELGEN_DIR}")
