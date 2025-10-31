@@ -137,7 +137,7 @@ def encode_text(text_list, device):
     """仅编码文本"""
     tokens = tokenizer(text_list, return_tensors='pt', padding=True, truncation=True).to(device)
     with torch.no_grad():
-        out = text_model(**tokens).last_hidden_state.mean(dim=1)  # shape [B, 768]
+        out = text_model(**tokens).last_hidden_state.mean(dim=1)  # shape [B, 384]
     return out
 # def encode_text(text_list, device, c_dim):
 #     tokens = tokenizer(text_list, return_tensors='pt', padding=True, truncation=True).to(device)
@@ -367,7 +367,7 @@ def train(args):
         # generate samples for inspection
         model.eval()
         text_sample = ["a car is moving when it raining"] * 2
-        c_emb = encode_text(text_sample, device, args.c_dim)
+        c_emb = encode_text(text_sample, device)
         samples = p_sample_loop(model, (2,1,args.n_mels, mel.size(3)), c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev, device)
         for idx, s in enumerate(samples):
             waveform = mel_to_audio_griffin(s, sample_rate=args.sample_rate, n_fft=1024, hop_length=512, n_iter=64, length=args.duration*args.sample_rate)
