@@ -133,16 +133,21 @@ for p in text_model.parameters():
     p.requires_grad = False
 
 text_proj = None  # will create later to match c_dim
-
-def encode_text(text_list, device, c_dim):
+def encode_text(text_list, device):
+    """仅编码文本"""
     tokens = tokenizer(text_list, return_tensors='pt', padding=True, truncation=True).to(device)
     with torch.no_grad():
-        out = text_model(**tokens).last_hidden_state.mean(dim=1)
-    # project to c_dim
-    global text_proj
-    if text_proj is None or text_proj.weight.shape[0] != c_dim:
-        text_proj = nn.Linear(out.size(1), c_dim).to(device)
-    return text_proj(out)
+        out = text_model(**tokens).last_hidden_state.mean(dim=1)  # shape [B, 768]
+    return out
+# def encode_text(text_list, device, c_dim):
+#     tokens = tokenizer(text_list, return_tensors='pt', padding=True, truncation=True).to(device)
+#     with torch.no_grad():
+#         out = text_model(**tokens).last_hidden_state.mean(dim=1)
+#     # project to c_dim
+#     global text_proj
+#     if text_proj is None or text_proj.weight.shape[0] != c_dim:
+#         text_proj = nn.Linear(out.size(1), c_dim).to(device)
+#     return text_proj(out)
 
 # ---------------- Time embedding ----------------
 
@@ -201,6 +206,7 @@ class ImprovedUNetCond(nn.Module):
     def __init__(self, in_channels=1, base_ch=256, t_dim=512, c_dim=512):
         super().__init__()
         self.t_dim, self.c_dim = t_dim, c_dim
+        self.text_proj = nn.Linear(384, c_dim)
         self.time_mlp = nn.Sequential(nn.Linear(t_dim, t_dim), nn.SiLU(), nn.Linear(t_dim, t_dim))
         # encoder
         self.enc1 = ResBlockCond(in_channels, base_ch, t_dim, c_dim)
@@ -218,6 +224,7 @@ class ImprovedUNetCond(nn.Module):
         self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
 
     def forward(self, x, t, c_emb=None):
+        c_emb = self.text_proj(c_emb)
         t_emb = sinusoidal_embedding(t, self.t_dim)
         t_emb = self.time_mlp(t_emb)
         e1 = self.enc1(x, t_emb, c_emb)
@@ -330,7 +337,7 @@ def train(args):
         pbar = tqdm(loader, desc=f"Epoch {epoch+1}/{args.epochs}")
         for i, (mel, text) in enumerate(pbar):
             mel = mel.to(device)
-            c_emb = encode_text(text, device, args.c_dim)
+            c_emb = encode_text(text, device)
             bs = mel.size(0)
             t = torch.randint(0, args.T, (bs,), device=device).long()
             noise = torch.randn_like(mel)
@@ -386,7 +393,7 @@ def sample(model_path, text, args, n=1, mel_len=None):
         # default time frames for given duration
         mel_len = math.ceil((args.duration * args.sample_rate) / 512)
 
-    c_emb = encode_text([text]*n, device, args.c_dim)
+    c_emb = encode_text([text]*n, device)
     samples = p_sample_loop(model, (n,1,args.n_mels, mel_len), c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev, device)
     waveforms = []
     for s in samples:
