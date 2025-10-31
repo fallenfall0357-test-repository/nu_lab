@@ -30,7 +30,7 @@ DEFAULTS = {
     'sample_rate': 16000,
     'duration': 10,
     'batch_size': 8,
-    'epochs': 10,
+    'epochs': 200,
     'lr': 2e-4,
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
     'T': 1000,
@@ -354,7 +354,8 @@ def train(args):
             pbar.set_postfix(loss=loss.item() * args.grad_accum)
 
         # save checkpoint
-        torch.save({'model': model.state_dict(), 'opt': opt.state_dict(), 'step': global_step}, os.path.join(args.save_dir, f'model_epoch{epoch+1}.pt'))
+        if args.epochs <= 10 or (epoch + 1 == args.epochs):
+            torch.save({'model': model.state_dict(), 'opt': opt.state_dict(), 'step': global_step}, os.path.join(args.save_dir, f'model_epoch{epoch+1}.pt'))
 
         # generate samples for inspection
         model.eval()
