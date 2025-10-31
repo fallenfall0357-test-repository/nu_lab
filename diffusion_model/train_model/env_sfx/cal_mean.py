@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
-from test import MACSDataset  # 如果类定义在 test.py 中
+from new import MACSDataset  # 如果类定义在 test.py 中
 from tqdm import tqdm
 
 # === 配置 ===

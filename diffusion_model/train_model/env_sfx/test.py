@@ -21,8 +21,8 @@ DATA_ANNOTATION = "../../data/MACS/annotations/MACS.yaml"
 N_MELS = 80
 SAMPLE_RATE = 16000
 DURATION = 10  # 秒数
-BATCH_SIZE = 8
-EPOCHS = 10
+BATCH_SIZE = 16
+EPOCHS = 200
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SAMPLE_COUNT = 2
@@ -308,7 +308,7 @@ def mel_to_audio(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter
 def train():
     dataset = MACSDataset(DATA_AUDIO_DIR, DATA_ANNOTATION)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
-    model = SmallUNetCond(in_channels=1, base_ch=128, t_dim=256, c_dim=384).to(DEVICE)
+    model = SmallUNetCond(in_channels=1, base_ch=256, t_dim=256, c_dim=384).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=LR)
     global_step = 0
     for epoch in range(EPOCHS):
@@ -343,7 +343,7 @@ def train():
 @torch.no_grad()
 def sample(model_path, text, n=1, mel_len=313):
     model = SmallUNetCond(in_channels=1, base_ch=128, t_dim=256, c_dim=384).to(DEVICE)
-    model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+    model.load_state_dict(torch.load(model_path, map_location=DEVICE, weights_only=True))
     model.eval()
     c_emb = encode_text([text]*n)
     samples = p_sample_loop(model, (n,1,N_MELS,mel_len), c_emb)
