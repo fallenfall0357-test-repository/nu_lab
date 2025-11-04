@@ -9,7 +9,7 @@
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import math
-import numpy as np
+# import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 
@@ -46,7 +46,7 @@ DEFAULTS = {
     'grad_accum': 1,
     'mixed_precision': True,
     'use_global_norm': True,
-    'stats_file': 'mel_stats.npz',
+    'stats_file': 'mel_stats.pt',
 }
 
 # ---------------- Utilities ----------------
@@ -75,7 +75,7 @@ def extract(a, t, x_shape):
 
 # ---------------- Dataset ----------------
 class MACSDataset(Dataset):
-    def __init__(self, audio_dir, annotation_file, n_mels=80, sample_rate=16000, duration=10, n_fft=1024, hop_length=512, use_global_norm = True,stats_file="mel_stats.npz"):
+    def __init__(self, audio_dir, annotation_file, n_mels=80, sample_rate=16000, duration=10, n_fft=1024, hop_length=512, use_global_norm = True,stats_file="mel_stats.pt"):
         self.audio_dir = Path(audio_dir)
         with open(annotation_file, 'r') as f:
             data = yaml.safe_load(f)
@@ -87,24 +87,34 @@ class MACSDataset(Dataset):
         # === 加载或计算全局统计 ===
         if use_global_norm:
             if Path(stats_file).exists():
-                stats = np.load(stats_file)
-                self.global_mean = stats['mean']
-                self.global_std = stats['std']
+                # print(f"[INFO] Loading global log-mel mean/std from {stats_file}")
+                stats = torch.load(stats_file, map_location="cpu", weights_only=True)
+                self.global_mean = stats["mean"]
+                self.global_std = stats["std"]
+                print(f"[INFO] Loading global log-mel mean{self.global_mean}/std{self.global_std} from {stats_file}")
             else:
                 # 若未计算过则自动计算一次
                 print("[INFO] Computing global log-mel mean/std...")
                 all_mels = []
                 for f in tqdm(data['files']):  # 可采样部分文件加快速度
-                    wav, sr = torchaudio.load(self.audio_dir / f)
+                    wav, sr = torchaudio.load(self.audio_dir / f['filename'])
                     mel = torchaudio.transforms.MelSpectrogram(
-                        sample_rate=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels)(wav)
+                        sample_rate=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels
+                    )(wav)
                     mel_db = torchaudio.transforms.AmplitudeToDB()(mel)
-                    all_mels.append(mel_db.mean(dim=-1).numpy())  # mean over time
-                all_mels = np.concatenate(all_mels, axis=1)
+                    all_mels.append(mel_db.mean(dim=-1))  # mean over time (no .numpy())
+
+                # 拼接后计算全局统计
+                all_mels = torch.cat(all_mels, dim=1)
                 self.global_mean = all_mels.mean()
                 self.global_std = all_mels.std()
-                np.savez(stats_file, mean=self.global_mean, std=self.global_std)
-                print(f"Saved mel stats to {stats_file}")
+
+                # 保存为 .pt 文件（torch 原生格式）
+                torch.save(
+                    {"mean": self.global_mean, "std": self.global_std},
+                    stats_file
+                )
+                print(f"[INFO] Saved mel stats to {stats_file}")
 
         self.n_fft = n_fft
         self.hop_length = hop_length
@@ -148,7 +158,7 @@ class MACSDataset(Dataset):
 
         mel = self.mel_transform(waveform)
         mel = torch.log1p(mel)
-        mel = mel.unsqueeze(0)
+        # mel = mel.unsqueeze(0)
 
         if self.use_global_norm:
             mel = (mel - self.global_mean) / (self.global_std + 1e-8)
@@ -315,8 +325,8 @@ def p_sample_loop(model, shape, c_emb, betas, alphas, alphas_cumprod, alphas_cum
     x = torch.randn(shape, device=device)
     for i in tqdm(reversed(range(betas.shape[0])), desc='sampling'):
         x = p_sample(model, x, i, c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev)
-    if use_global_norm and Path("mel_stats.npz").exists():
-        stats = np.load("mel_stats.npz")
+    if use_global_norm and Path("mel_stats.pt").exists():
+        stats = torch.load("mel_stats.pt", weights_only=True)
         mean, std = stats["mean"], stats["std"]
         x = x * std + mean
     return x
