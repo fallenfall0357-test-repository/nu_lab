@@ -9,6 +9,7 @@
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import math
+import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 
@@ -44,6 +45,8 @@ DEFAULTS = {
     'hifigan_ckpt': '',
     'grad_accum': 1,
     'mixed_precision': True,
+    'use_global_norm': True,
+    'stats_file': 'mel_stats.npz',
 }
 
 # ---------------- Utilities ----------------
@@ -72,13 +75,37 @@ def extract(a, t, x_shape):
 
 # ---------------- Dataset ----------------
 class MACSDataset(Dataset):
-    def __init__(self, audio_dir, annotation_file, n_mels=80, sample_rate=16000, duration=10, n_fft=1024, hop_length=512):
+    def __init__(self, audio_dir, annotation_file, n_mels=80, sample_rate=16000, duration=10, n_fft=1024, hop_length=512, use_global_norm = True,stats_file="mel_stats.npz"):
         self.audio_dir = Path(audio_dir)
         with open(annotation_file, 'r') as f:
             data = yaml.safe_load(f)
         self.n_mels = n_mels
         self.sample_rate = sample_rate
         self.duration = duration
+        self.use_global_norm = use_global_norm
+
+        # === 加载或计算全局统计 ===
+        if args.use_global_norm:
+            if Path(stats_file).exists():
+                stats = np.load(stats_file)
+                self.global_mean = stats['mean']
+                self.global_std = stats['std']
+            else:
+                # 若未计算过则自动计算一次
+                print("[INFO] Computing global log-mel mean/std...")
+                all_mels = []
+                for f in tqdm(self.files):  # 可采样部分文件加快速度
+                    wav, sr = torchaudio.load(self.audio_dir / f)
+                    mel = torchaudio.transforms.MelSpectrogram(
+                        sample_rate=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels)(wav)
+                    mel_db = torchaudio.transforms.AmplitudeToDB()(mel)
+                    all_mels.append(mel_db.mean(dim=-1).numpy())  # mean over time
+                all_mels = np.concatenate(all_mels, axis=1)
+                self.global_mean = all_mels.mean()
+                self.global_std = all_mels.std()
+                np.savez(stats_file, mean=self.global_mean, std=self.global_std)
+                print(f"Saved mel stats to {stats_file}")
+
         self.n_fft = n_fft
         self.hop_length = hop_length
 
@@ -122,6 +149,15 @@ class MACSDataset(Dataset):
         mel = self.mel_transform(waveform)
         mel = torch.log1p(mel)
         mel = mel.unsqueeze(0)
+
+        if self.use_global_norm:
+            mel = (mel - self.global_mean) / (self.global_std + 1e-8)
+        # else:
+        #     # per-sample normalization
+        #     mean = mel.mean()
+        #     std = mel.std()
+        #     mel = (mel - mean) / (std + 1e-8)
+
         sentence = sample['sentence']
         return mel, sentence
 
@@ -275,10 +311,14 @@ def p_sample(model, x_t, t_index, c_emb, betas, alphas, alphas_cumprod, alphas_c
         return model_mean + torch.sqrt(var) * noise
 
 @torch.no_grad()
-def p_sample_loop(model, shape, c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev, device):
+def p_sample_loop(model, shape, c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev, device, use_global_norm = True):
     x = torch.randn(shape, device=device)
     for i in tqdm(reversed(range(betas.shape[0])), desc='sampling'):
         x = p_sample(model, x, i, c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev)
+    if use_global_norm:
+        stats = np.load("mel_stats.npz")
+        mean, std = stats["mean"], stats["std"]
+        return x * std + mean
     return x
 
 # ---------------- Vocoder ----------------
@@ -316,7 +356,7 @@ def train(args):
     device = torch.device(args.device)
     mkdirs(args.save_dir, args.sample_dir, args.modelgen_dir)
 
-    dataset = MACSDataset(args.data_audio_dir, args.data_annotation, n_mels=args.n_mels, sample_rate=args.sample_rate, duration=args.duration)
+    dataset = MACSDataset(args.data_audio_dir, args.data_annotation, n_mels=args.n_mels, sample_rate=args.sample_rate, duration=args.duration,stats_file=args.stats_file)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
     model = ImprovedUNetCond(in_channels=1, base_ch=args.base_ch, t_dim=args.t_dim, c_dim=args.c_dim).to(device)
@@ -369,7 +409,7 @@ def train(args):
         model.eval()
         text_sample = ["a car is moving when it raining"] * 2
         c_emb = encode_text(text_sample, device)
-        samples = p_sample_loop(model, (2,1,args.n_mels, mel.size(3)), c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev, device)
+        samples = p_sample_loop(model, (2,1,args.n_mels, mel.size(3)), c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev, device, use_global_norm=args.use_global_norm)
         for idx, s in enumerate(samples):
             waveform = mel_to_audio_griffin(s, sample_rate=args.sample_rate, n_fft=1024, hop_length=512, n_iter=64, length=args.duration*args.sample_rate)
             out_path = os.path.join(args.sample_dir, f'sample_epoch{epoch+1}_{idx}.wav')
@@ -395,7 +435,7 @@ def sample(model_path, text, args, n=1, mel_len=None):
         mel_len = math.ceil((args.duration * args.sample_rate) / 512)
 
     c_emb = encode_text([text]*n, device)
-    samples = p_sample_loop(model, (n,1,args.n_mels, mel_len), c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev, device)
+    samples = p_sample_loop(model, (n,1,args.n_mels, mel_len), c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev, device, use_global_norm=args.use_global_norm)
     waveforms = []
     for s in samples:
         wav = mel_to_audio_griffin(s, sample_rate=args.sample_rate, n_fft=1024, hop_length=512, n_iter=128, length=args.duration*args.sample_rate)
@@ -431,6 +471,8 @@ if __name__ == '__main__':
     parser.add_argument('--hifigan_ckpt', type=str, default=DEFAULTS['hifigan_ckpt'])
     parser.add_argument('--grad_accum', type=int, default=DEFAULTS['grad_accum'])
     parser.add_argument('--mixed_precision', action='store_true')
+    parser.add_argument('--use_global_norm', action='store_true')
+    parser.add_argument('--stats_file', type=str, default=DEFAULTS['stats_file'])
 
     # sampling
     parser.add_argument('--model', type=str, default='')
