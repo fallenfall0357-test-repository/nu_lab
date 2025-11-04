@@ -9,4 +9,4 @@ diffusion_model/data/**/*.wav
 diffusion_model/data/**/*.zip
 *.pyc
 *.pt
-*.wav
+*.pth

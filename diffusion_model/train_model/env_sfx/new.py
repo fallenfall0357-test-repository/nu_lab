@@ -121,6 +121,7 @@ class MACSDataset(Dataset):
 
         mel = self.mel_transform(waveform)
         mel = torch.log1p(mel)
+        mel = mel.unsqueeze(0)
         sentence = sample['sentence']
         return mel, sentence
 
