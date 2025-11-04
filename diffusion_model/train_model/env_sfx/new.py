@@ -85,7 +85,7 @@ class MACSDataset(Dataset):
         self.use_global_norm = use_global_norm
 
         # === 加载或计算全局统计 ===
-        if args.use_global_norm:
+        if use_global_norm:
             if Path(stats_file).exists():
                 stats = np.load(stats_file)
                 self.global_mean = stats['mean']
@@ -94,7 +94,7 @@ class MACSDataset(Dataset):
                 # 若未计算过则自动计算一次
                 print("[INFO] Computing global log-mel mean/std...")
                 all_mels = []
-                for f in tqdm(self.files):  # 可采样部分文件加快速度
+                for f in tqdm(data['files']):  # 可采样部分文件加快速度
                     wav, sr = torchaudio.load(self.audio_dir / f)
                     mel = torchaudio.transforms.MelSpectrogram(
                         sample_rate=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels)(wav)
@@ -315,10 +315,10 @@ def p_sample_loop(model, shape, c_emb, betas, alphas, alphas_cumprod, alphas_cum
     x = torch.randn(shape, device=device)
     for i in tqdm(reversed(range(betas.shape[0])), desc='sampling'):
         x = p_sample(model, x, i, c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev)
-    if use_global_norm:
+    if use_global_norm and Path("mel_stats.npz").exists():
         stats = np.load("mel_stats.npz")
         mean, std = stats["mean"], stats["std"]
-        return x * std + mean
+        x = x * std + mean
     return x
 
 # ---------------- Vocoder ----------------
@@ -356,7 +356,7 @@ def train(args):
     device = torch.device(args.device)
     mkdirs(args.save_dir, args.sample_dir, args.modelgen_dir)
 
-    dataset = MACSDataset(args.data_audio_dir, args.data_annotation, n_mels=args.n_mels, sample_rate=args.sample_rate, duration=args.duration,stats_file=args.stats_file)
+    dataset = MACSDataset(args.data_audio_dir, args.data_annotation, n_mels=args.n_mels, sample_rate=args.sample_rate, duration=args.duration, use_global_norm=args.use_global_norm,stats_file=args.stats_file)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
     model = ImprovedUNetCond(in_channels=1, base_ch=args.base_ch, t_dim=args.t_dim, c_dim=args.c_dim).to(device)
