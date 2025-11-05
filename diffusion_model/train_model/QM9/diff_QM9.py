@@ -34,8 +34,8 @@ EPOCHS = 100
 LR = 2e-4
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-SAVE_DIR = "../../output/molgraph/weights/checkpoints"
-SAMPLE_DIR = "../../output/molgraph/samples/last_train"
+SAVE_DIR = "../../output/molgraph/weights/checkpoints_test"
+SAMPLE_DIR = "../../output/molgraph/samples/last_train_test"
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(SAMPLE_DIR, exist_ok=True)
 
@@ -162,6 +162,8 @@ def p_sample(model, x_t, t_index):
     sqrt_recip_a = torch.sqrt(1.0 / a_t)
     # predict noise
     eps_theta = model(x_t, t)
+    # if t_index % 100 == 0: print(f"eps_theta in T={t_index}:{eps_theta.mean().item()},std:{eps_theta.std().item()}")
+    
     # compute model mean for p(x_{t-1} | x_t)
     model_mean = (1. / torch.sqrt(a_t)) * (x_t - (bet / torch.sqrt(1. - a_cum)) * eps_theta)
     if t_index == 0:
@@ -177,6 +179,7 @@ def p_sample_loop(model, shape):
     img = torch.randn(shape, device=device)
     for i in tqdm(reversed(range(T))):
         img = p_sample(model, img, i)
+    # print(f"p_sample_loop img without global_norm mean:{img.mean().item()},std:{img.std().item()}")
     return img
 
 # ---------------- Training ----------------

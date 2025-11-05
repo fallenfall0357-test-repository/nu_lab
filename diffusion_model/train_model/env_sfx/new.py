@@ -16,7 +16,7 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset
 import torchaudio
 import torchaudio.functional as F_audio
 import yaml
@@ -32,16 +32,16 @@ DEFAULTS = {
     'duration': 10,
     'batch_size': 8,
     'epochs': 200,
-    'lr': 2e-4,
+    'lr': 2e-5,
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
     'T': 1000,
     'base_ch': 256,
-    't_dim': 512,
-    'c_dim': 512,
+    't_dim': 512, #512
+    'c_dim': 512, #512
     'save_dir': '../../output/sfx/weights',
     'sample_dir': '../../output/sfx/samples',
     'modelgen_dir': '../../output/sfx/test',
-    'vocoder': 'griffinlim',  # or 'hifigan'
+    'vocoder': 'griffinlim',
     'hifigan_ckpt': '',
     'grad_accum': 1,
     'mixed_precision': True,
@@ -98,10 +98,12 @@ class MACSDataset(Dataset):
                 all_mels = []
                 for f in tqdm(data['files']):  # 可采样部分文件加快速度
                     wav, sr = torchaudio.load(self.audio_dir / f['filename'])
+                    sr = sample_rate
                     mel = torchaudio.transforms.MelSpectrogram(
                         sample_rate=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels
                     )(wav)
-                    mel_db = torchaudio.transforms.AmplitudeToDB()(mel)
+                    # mel_db = torchaudio.transforms.AmplitudeToDB()(mel)
+                    mel_db = torch.log1p(mel)
                     all_mels.append(mel_db.mean(dim=-1))  # mean over time (no .numpy())
 
                 # 拼接后计算全局统计
@@ -169,6 +171,7 @@ class MACSDataset(Dataset):
         #     mel = (mel - mean) / (std + 1e-8)
 
         sentence = sample['sentence']
+        # print(f"mean:{mel.mean().item()},std:{mel.std().item()}")
         return mel, sentence
 
 # ---------------- Text encoder ----------------
@@ -230,12 +233,16 @@ class ResBlockCond(nn.Module):
             scale_t, shift_t = ts.chunk(2, dim=1)
             scale_t = scale_t.unsqueeze(-1).unsqueeze(-1)
             shift_t = shift_t.unsqueeze(-1).unsqueeze(-1)
+            # scale_t = torch.tanh(scale_t).unsqueeze(-1).unsqueeze(-1)
+            # shift_t = torch.tanh(shift_t).unsqueeze(-1).unsqueeze(-1)
             h = h * (1 + scale_t) + shift_t
         if self.cond_proj is not None and c_emb is not None:
             cs = self.cond_proj(c_emb)
             scale_c, shift_c = cs.chunk(2, dim=1)
             scale_c = scale_c.unsqueeze(-1).unsqueeze(-1)
             shift_c = shift_c.unsqueeze(-1).unsqueeze(-1)
+            # scale_c = torch.tanh(scale_c).unsqueeze(-1).unsqueeze(-1)
+            # shift_c = torch.tanh(shift_c).unsqueeze(-1).unsqueeze(-1)
             h = h * (1 + scale_c) + shift_c
         h = self.act(h)
         h = self.conv2(h)
@@ -266,6 +273,7 @@ class ImprovedUNetCond(nn.Module):
         self.dec3 = ResBlockCond(base_ch*8, base_ch*2, t_dim, c_dim)
         self.dec2 = ResBlockCond(base_ch*4, base_ch, t_dim, c_dim)
         self.dec1 = ResBlockCond(base_ch*2, base_ch, t_dim, c_dim)
+        # self.out = nn.Sequential(nn.Conv2d(base_ch, in_channels, 1),nn.Tanh())
         self.out = nn.Conv2d(base_ch, in_channels, 1)
         self.pool = nn.AvgPool2d(2)
         self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
@@ -312,6 +320,7 @@ def p_sample(model, x_t, t_index, c_emb, betas, alphas, alphas_cumprod, alphas_c
     a_cum = extract(alphas_cumprod, t, x_t.shape)
     sqrt_recip_a = torch.sqrt(1.0 / a_t)
     eps_theta = model(x_t, t, c_emb)
+    if t_index % 100 == 0: print(f"eps_theta in T={t_index}:{eps_theta.mean().item()},std:{eps_theta.std().item()},max:{eps_theta.max().item()},min:{eps_theta.min().item()}")
     model_mean = (1./torch.sqrt(a_t))*(x_t - (bet/torch.sqrt(1.-a_cum))*eps_theta)
     if t_index == 0:
         return model_mean
@@ -325,17 +334,22 @@ def p_sample_loop(model, shape, c_emb, betas, alphas, alphas_cumprod, alphas_cum
     x = torch.randn(shape, device=device)
     for i in tqdm(reversed(range(betas.shape[0])), desc='sampling'):
         x = p_sample(model, x, i, c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev)
+    # print(f"p_sample_loop x without global_norm mean:{x.mean().item()},std:{x.std().item()}")
     if use_global_norm and Path("mel_stats.pt").exists():
         stats = torch.load("mel_stats.pt", weights_only=True)
         mean, std = stats["mean"], stats["std"]
         x = x * std + mean
+    print(f"p_sample_loop x_out with global_norm mean:{x.mean().item()},std:{x.std().item()}")
     return x
 
 # ---------------- Vocoder ----------------
 
 def mel_to_audio_griffin(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512, n_iter=64, length=None):
+    # mel = torch.clamp(mel_spec, min=-20.0, max=20.0)
+    # print(f"mel_expm1 mean before expm1:{mel_spec.mean().item()},std:{mel_spec.std().item()}")
     mel = torch.expm1(mel_spec.squeeze(0))
-    mel = mel.clamp(min=1e-7) * 10.0
+    # print(f"mel_expm1 mean:{mel.mean().item()},std:{mel.std().item()}")
+    mel = mel.clamp(min=1e-8) * 10.0
     mel_inv = torchaudio.transforms.InverseMelScale(n_stft=n_fft//2+1, n_mels=mel.shape[0], sample_rate=sample_rate).to(mel.device)
     spec = mel_inv(mel)
     if length is None:
@@ -345,21 +359,6 @@ def mel_to_audio_griffin(mel_spec, sample_rate=16000, n_fft=1024, hop_length=512
     waveform = waveform / (waveform.abs().max() + 1e-9)
     return waveform.cpu()
 
-# # Optional HiFi-GAN loader function (user must supply checkpoint and config)
-# # Here we provide a simple placeholder: if user has hifigan module and checkpoint, they can pass path
-
-# def load_hifigan_generator(ckpt_path, device):
-#     try:
-#         from hifigan import Generator  # user should have hifigan module available
-#         g = Generator().to(device)
-#         ckpt = torch.load(ckpt_path, map_location=device)
-#         g.load_state_dict(ckpt['generator'])
-#         g.eval()
-#         return g
-#     except Exception as e:
-#         print('HiFi-GAN not available or failed to load:', e)
-#         return None
-
 # ---------------- Training loop ----------------
 
 def train(args):
@@ -368,12 +367,16 @@ def train(args):
 
     dataset = MACSDataset(args.data_audio_dir, args.data_annotation, n_mels=args.n_mels, sample_rate=args.sample_rate, duration=args.duration, use_global_norm=args.use_global_norm,stats_file=args.stats_file)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    # loader = DataLoader(Subset(dataset, range(1000)), batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
     model = ImprovedUNetCond(in_channels=1, base_ch=args.base_ch, t_dim=args.t_dim, c_dim=args.c_dim).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # schedule
-    betas = cosine_beta_schedule(args.T)
+    beta_start = 1e-4
+    beta_end = 2e-2
+    betas = torch.linspace(beta_start, beta_end, 1000)
+    # betas = cosine_beta_schedule(args.T)
     alphas = 1. - betas
     alphas_cumprod = torch.cumprod(alphas, dim=0)
     alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1,0), value=1.0)
@@ -393,6 +396,8 @@ def train(args):
             t = torch.randint(0, args.T, (bs,), device=device).long()
             noise = torch.randn_like(mel)
             x_t = q_sample(mel, t, noise, sqrt_alphas_cumprod, sqrt_one_minus_alphas_cumprod)
+            # print(f"x_t mean:{x_t.mean().item()},std:{x_t.std().item()}")
+            # print(f"noise mean:{noise.mean().item()},std:{noise.std().item()}")
 
             model.train()
             # with torch.cuda.amp.autocast(enabled=args.mixed_precision and device.type=='cuda'):
@@ -418,8 +423,10 @@ def train(args):
         # generate samples for inspection
         model.eval()
         text_sample = ["a car is moving when it raining"] * 2
+        # text_sample = ["a person whistling and singing"] * 2
         c_emb = encode_text(text_sample, device)
         samples = p_sample_loop(model, (2,1,args.n_mels, mel.size(3)), c_emb, betas, alphas, alphas_cumprod, alphas_cumprod_prev, device, use_global_norm=args.use_global_norm)
+        # print(f"samples_mel mean:{samples.mean().item()},std:{samples.std().item()}")
         for idx, s in enumerate(samples):
             waveform = mel_to_audio_griffin(s, sample_rate=args.sample_rate, n_fft=1024, hop_length=512, n_iter=64, length=args.duration*args.sample_rate)
             out_path = os.path.join(args.sample_dir, f'sample_epoch{epoch+1}_{idx}.wav')
