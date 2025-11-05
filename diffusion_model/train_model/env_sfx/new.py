@@ -320,7 +320,7 @@ def p_sample(model, x_t, t_index, c_emb, betas, alphas, alphas_cumprod, alphas_c
     a_cum = extract(alphas_cumprod, t, x_t.shape)
     sqrt_recip_a = torch.sqrt(1.0 / a_t)
     eps_theta = model(x_t, t, c_emb)
-    if t_index % 100 == 0: print(f"eps_theta in T={t_index}:{eps_theta.mean().item()},std:{eps_theta.std().item()},max:{eps_theta.max().item()},min:{eps_theta.min().item()}")
+    # if t_index % 100 == 0: print(f"eps_theta in T={t_index}:{eps_theta.mean().item()},std:{eps_theta.std().item()},max:{eps_theta.max().item()},min:{eps_theta.min().item()}")
     model_mean = (1./torch.sqrt(a_t))*(x_t - (bet/torch.sqrt(1.-a_cum))*eps_theta)
     if t_index == 0:
         return model_mean

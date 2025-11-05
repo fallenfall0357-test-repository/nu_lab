@@ -10,3 +10,4 @@ diffusion_model/data/**/*.zip
 *.pyc
 *.pt
 *.pth
+*.zip
