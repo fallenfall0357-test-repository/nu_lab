@@ -3,7 +3,9 @@ import torchaudio
 import matplotlib.pyplot as plt
 
 # ---- 1. 读取 wav 文件 ----
-wav_path = "samples/sample_epoch20_0"
+wav_path = "samples/sample_epoch2_0"
+# wav_path = "test/sample_a_person_whistling_and_singing_0"
+# wav_path = "convert"
 waveform, sample_rate = torchaudio.load(wav_path+".wav")  # waveform: [channels, time]
 
 # 若为立体声，取平均转为单声道

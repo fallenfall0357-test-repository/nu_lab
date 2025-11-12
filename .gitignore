@@ -11,3 +11,4 @@ diffusion_model/data/**/*.zip
 *.pt
 *.pth
 *.zip
+*.ckpt
