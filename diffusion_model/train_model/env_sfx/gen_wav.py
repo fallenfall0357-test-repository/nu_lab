@@ -50,7 +50,7 @@ def parse_args():
     parser.add_argument(
         "--save_name",
         type=str,
-        default='test', 
+        default="", 
         help="audio path name for saving",
     ) 
     return parser.parse_args()
@@ -108,6 +108,8 @@ if __name__ == '__main__':
     vocoder = VocoderBigVGAN('useful_ckpts/bigvgan',device=device)
     print("Generating audios, it may takes a long time depending on your gpu performance")
     wav_list = gen_wav(sampler,vocoder,prompt=args.prompt,ddim_steps=args.ddim_steps,scale=args.scale,duration=args.duration,n_samples=args.n_samples)
+    if args.save_name == "":
+        args.save_name = args.prompt.replace(' ', '_')
     for idx,wav in enumerate(wav_list):
         soundfile.write(f'{args.save_name}_{idx}.wav',wav,samplerate=SAMPLE_RATE)
     print(f"audios are saved in {args.save_name}_i.wav")
