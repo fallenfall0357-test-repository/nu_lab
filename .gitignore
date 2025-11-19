@@ -12,3 +12,4 @@ diffusion_model/data/**/*.zip
 *.pth
 *.zip
 *.ckpt
+diffusion_model/train_model/env_sfx/src/taming-transformers
