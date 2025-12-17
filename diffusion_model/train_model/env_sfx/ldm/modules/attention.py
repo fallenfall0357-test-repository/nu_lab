@@ -150,7 +150,7 @@ class SpatialSelfAttention(nn.Module):
 
 
 class CrossAttention(nn.Module):
-    def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0.):# 如果设置了context_dim就不是自注意力了
+    def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0.):# if set context_dim, here is not self-attn
         super().__init__()
         inner_dim = dim_head * heads # inner_dim == SpatialTransformer.model_channels
         context_dim = default(context_dim, query_dim)

@@ -1,0 +1,40 @@
+{
+  "os":  "Linux-5.14.0-503.26.1.el9_5.x86_64-x86_64-with-glibc2.34",
+  "python":  "CPython 3.12.12",
+  "startedAt":  "2025-12-17T03:28:55.817280Z",
+  "program":  "/home/tjh0357/work/nu_lab/attention/nanogpt_modified_ffn/train.py",
+  "codePath":  "attention/nanogpt_modified_ffn/train.py",
+  "codePathLocal":  "train.py",
+  "git":  {
+    "remote":  "git@github.com:fallenfall0357-test-repository/nu_lab.git",
+    "commit":  "263a0c0d0596878cf783394dc3c04f3fc00cc540"
+  },
+  "email":  "fallenfall0357@gmail.com",
+  "root":  "/home/tjh0357/work/nu_lab/attention/nanogpt_modified_ffn",
+  "host":  "y46",
+  "executable":  "/home/tjh0357/anaconda3/envs/gpt/bin/python",
+  "cpu_count":  24,
+  "cpu_count_logical":  32,
+  "gpu":  "NVIDIA GeForce RTX 4090",
+  "gpu_count":  1,
+  "disk":  {
+    "/":  {
+      "total":  "214643507200",
+      "used":  "45363150848"
+    }
+  },
+  "memory":  {
+    "total":  "66940092416"
+  },
+  "gpu_nvidia":  [
+    {
+      "name":  "NVIDIA GeForce RTX 4090",
+      "memoryTotal":  "25757220864",
+      "cudaCores":  16384,
+      "architecture":  "Ada",
+      "uuid":  "GPU-65f99435-1237-3b08-42f5-4a31270a4040"
+    }
+  ],
+  "cudaVersion":  "12.8",
+  "writerId":  "8iei3n44ojqy4mk22rnljwssevp6w71n"
+}

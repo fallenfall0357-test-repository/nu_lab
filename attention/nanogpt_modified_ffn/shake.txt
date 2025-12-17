@@ -1,0 +1,180 @@
+warning: `VIRTUAL_ENV=/home/s.nanako/nanoGPT/.venv` does not match the project environment path `.venv` and will be ignored
+/home/s.nanako/nanogpt/.venv/lib/python3.12/site-packages/torch/backends/__init__.py:46: UserWarning: Please use the new API settings to control TF32 behavior, such as torch.backends.cudnn.conv.fp32_precision = 'tf32' or torch.backends.cuda.matmul.fp32_precision = 'ieee'. Old settings, e.g, torch.backends.cuda.matmul.allow_tf32 = True, torch.backends.cudnn.allow_tf32 = True, allowTF32CuDNN() and allowTF32CuBLAS() will be deprecated after Pytorch 2.9. Please see https://pytorch.org/docs/main/notes/cuda.html#tensorfloat-32-tf32-on-ampere-and-later-devices (Triggered internally at /pytorch/aten/src/ATen/Context.cpp:80.)
+  self.setter(val)
+/home/s.nanako/nanogpt/train.py:196: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
+wandb: Currently logged in as: nac-39 (nac-39-nagoya-univ-) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 51yc5egh
+wandb: Tracking run with wandb version 0.22.3
+wandb: Run data is saved locally in /home/s.nanako/nanogpt/wandb/run-20251110_184320-51yc5egh
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run no-ffn-gpt2_shakespeare_1762767792.678713
+wandb: ⭐️ View project at https://wandb.ai/nac-39-nagoya-univ-/no-ffn-gpt2
+wandb: 🚀 View run at https://wandb.ai/nac-39-nagoya-univ-/no-ffn-gpt2/runs/51yc5egh
+Overriding config with config/train_gpt2_shakespeare.py:
+# config for training GPT-2 (124M) down to very nice loss of ~2.85 on 1 node of 8X A100 40GB
+# launch as the following (e.g. in a screen session) and wait ~5 days:
+# $ torchrun --standalone --nproc_per_node=8 train.py config/train_gpt2.py
+import time
+
+wandb_log = True
+# wandb_project = 'owt'
+# wandb_run_name='gpt2-124M'
+wandb_project = "no-ffn-gpt2"
+wandb_run_name = "no-ffn-gpt2_shakespeare_" + str(time.time())
+# these make the total batch size be ~0.5M
+# 12 batch size * 1024 block size * 5 gradaccum * 8 GPUs = 491,520
+# batch_size = 12
+# block_size = 1024
+# gradient_accumulation_steps = 5 * 8
+
+
+gradient_accumulation_steps = 1
+batch_size = 64
+block_size = 256  # context of up to 256 previous characters
+
+max_iters = 5000
+lr_decay_iters = 5000  # make equal to max_iters usually
+
+# baby GPT model :)
+n_layer = 6
+n_head = 6
+n_embd = 384
+dropout = 0.2
+
+learning_rate = 1e-3  # with baby networks can afford to go a bit higher
+
+out_dir = "out-shakespeare"
+eval_interval = 250  # keep frequent because we'll overfit
+eval_iters = 200
+log_interval = 10  # don't print too too often
+
+tokens per iteration will be: 16,384
+Initializing a new model from scratch
+defaulting to vocab_size of GPT-2 to 50304 (50257 rounded up for efficiency)
+number of parameters: 29.94M
+num decayed parameter tensors: 32, with 30,031,872 parameters
+num non-decayed parameter tensors: 7, with 2,688 parameters
+using fused AdamW: True
+compiling the model... (takes a ~minute)
+step 0: train loss 10.8192, val loss 10.8184
+iter 0: loss 10.8280, time 7155.85ms, mfu -100.00%
+iter 10: loss 10.7693, time 41.82ms, mfu 23.44%
+iter 20: loss 10.6428, time 41.84ms, mfu 23.44%
+iter 30: loss 10.4248, time 42.14ms, mfu 23.42%
+iter 40: loss 10.1973, time 42.17ms, mfu 23.40%
+iter 50: loss 10.0558, time 42.14ms, mfu 23.39%
+iter 60: loss 9.9238, time 42.14ms, mfu 23.38%
+iter 70: loss 9.8005, time 42.18ms, mfu 23.36%
+iter 80: loss 9.6533, time 42.19ms, mfu 23.35%
+iter 90: loss 9.4864, time 42.11ms, mfu 23.34%
+iter 100: loss 9.3174, time 42.11ms, mfu 23.34%
+iter 110: loss 9.0863, time 42.14ms, mfu 23.33%
+iter 120: loss 8.8937, time 42.13ms, mfu 23.32%
+iter 130: loss 8.6856, time 42.28ms, mfu 23.31%
+iter 140: loss 8.4757, time 42.27ms, mfu 23.30%
+iter 150: loss 8.2928, time 42.19ms, mfu 23.29%
+iter 160: loss 8.1516, time 42.22ms, mfu 23.29%
+iter 170: loss 7.9448, time 42.20ms, mfu 23.28%
+iter 180: loss 7.7824, time 42.38ms, mfu 23.27%
+iter 190: loss 7.7761, time 42.38ms, mfu 23.25%
+iter 200: loss 7.5387, time 42.38ms, mfu 23.24%
+iter 210: loss 7.6210, time 42.38ms, mfu 23.23%
+iter 220: loss 7.5274, time 42.31ms, mfu 23.22%
+iter 230: loss 7.4395, time 42.29ms, mfu 23.22%
+iter 240: loss 7.3582, time 42.36ms, mfu 23.21%
+step 250: train loss 7.4248, val loss 7.4230
+saving checkpoint to out-shakespeare
+iter 250: loss 7.3435, time 8429.22ms, mfu 20.90%
+iter 260: loss 7.5843, time 42.16ms, mfu 21.14%
+iter 270: loss 7.4125, time 42.04ms, mfu 21.36%
+iter 280: loss 7.3420, time 42.13ms, mfu 21.55%
+iter 290: loss 7.2617, time 42.09ms, mfu 21.72%
+iter 300: loss 7.2089, time 42.36ms, mfu 21.86%
+iter 310: loss 7.2735, time 42.33ms, mfu 21.99%
+iter 320: loss 7.1955, time 42.31ms, mfu 22.11%
+iter 330: loss 7.1525, time 42.48ms, mfu 22.21%
+iter 340: loss 7.0367, time 42.40ms, mfu 22.30%
+iter 350: loss 7.1148, time 42.38ms, mfu 22.38%
+iter 360: loss 7.0755, time 42.32ms, mfu 22.46%
+iter 370: loss 7.0134, time 42.36ms, mfu 22.53%
+iter 380: loss 7.0777, time 42.46ms, mfu 22.59%
+iter 390: loss 6.8428, time 42.32ms, mfu 22.64%
+iter 400: loss 6.8792, time 42.33ms, mfu 22.70%
+iter 410: loss 6.9680, time 42.42ms, mfu 22.74%
+iter 420: loss 7.0139, time 42.33ms, mfu 22.78%
+iter 430: loss 6.7651, time 42.46ms, mfu 22.81%
+iter 440: loss 6.8179, time 42.34ms, mfu 22.85%
+iter 450: loss 6.6796, time 42.39ms, mfu 22.87%
+iter 460: loss 6.6624, time 42.35ms, mfu 22.90%
+iter 470: loss 6.6090, time 42.46ms, mfu 22.92%
+iter 480: loss 6.6718, time 42.38ms, mfu 22.94%
+iter 490: loss 6.7753, time 42.41ms, mfu 22.96%
+step 500: train loss 6.5951, val loss 6.6087
+saving checkpoint to out-shakespeare
+iter 500: loss 6.6776, time 8674.89ms, mfu 20.67%
+iter 510: loss 6.7933, time 41.80ms, mfu 20.95%
+iter 520: loss 6.5823, time 42.00ms, mfu 21.19%
+iter 530: loss 6.5088, time 42.21ms, mfu 21.39%
+iter 540: loss 6.4726, time 42.21ms, mfu 21.58%
+iter 550: loss 6.6485, time 42.23ms, mfu 21.74%
+iter 560: loss 6.5506, time 42.28ms, mfu 21.89%
+iter 570: loss 6.6146, time 42.38ms, mfu 22.01%
+iter 580: loss 6.4773, time 42.41ms, mfu 22.12%
+iter 590: loss 6.4756, time 42.46ms, mfu 22.22%
+iter 600: loss 6.4333, time 42.41ms, mfu 22.31%
+iter 610: loss 6.3519, time 42.37ms, mfu 22.39%
+iter 620: loss 6.4807, time 42.36ms, mfu 22.47%
+iter 630: loss 6.4930, time 42.34ms, mfu 22.53%
+iter 640: loss 6.5306, time 42.41ms, mfu 22.59%
+iter 650: loss 6.4254, time 42.50ms, mfu 22.64%
+iter 660: loss 6.4892, time 42.39ms, mfu 22.69%
+iter 670: loss 6.4781, time 42.36ms, mfu 22.74%
+iter 680: loss 6.4307, time 42.39ms, mfu 22.77%
+iter 690: loss 6.6788, time 43.41ms, mfu 22.76%
+iter 700: loss 6.4649, time 42.39ms, mfu 22.79%
+iter 710: loss 6.3156, time 42.38ms, mfu 22.83%
+iter 720: loss 6.4978, time 42.45ms, mfu 22.85%
+iter 730: loss 6.3802, time 42.47ms, mfu 22.88%
+iter 740: loss 6.2761, time 42.46ms, mfu 22.90%
+step 750: train loss 6.3504, val loss 6.3700
+saving checkpoint to out-shakespeare
+iter 750: loss 6.5410, time 8553.84ms, mfu 20.62%
+iter 760: loss 6.4679, time 41.86ms, mfu 20.90%
+iter 770: loss 6.3701, time 42.08ms, mfu 21.14%
+iter 780: loss 6.4178, time 42.11ms, mfu 21.35%
+iter 790: loss 6.3520, time 42.37ms, mfu 21.53%
+iter 800: loss 6.3224, time 42.39ms, mfu 21.69%
+iter 810: loss 6.4012, time 42.45ms, mfu 21.83%
+iter 820: loss 6.3743, time 42.46ms, mfu 21.96%
+iter 830: loss 6.2828, time 42.36ms, mfu 22.08%
+iter 840: loss 6.2351, time 42.35ms, mfu 22.18%
+iter 850: loss 6.3286, time 42.41ms, mfu 22.28%
+iter 860: loss 6.2707, time 42.46ms, mfu 22.36%
+iter 870: loss 6.2707, time 42.38ms, mfu 22.44%
+iter 880: loss 6.2728, time 42.37ms, mfu 22.51%
+iter 890: loss 6.3931, time 43.03ms, mfu 22.53%
+iter 900: loss 6.2895, time 42.31ms, mfu 22.60%
+iter 910: loss 6.4306, time 42.42ms, mfu 22.65%
+iter 920: loss 6.3286, time 42.43ms, mfu 22.70%
+iter 930: loss 6.2983, time 42.46ms, mfu 22.73%
+iter 940: loss 6.2136, time 42.41ms, mfu 22.77%
+iter 950: loss 6.3862, time 42.59ms, mfu 22.80%
+iter 960: loss 6.2706, time 42.43ms, mfu 22.83%
+iter 970: loss 6.4067, time 42.37ms, mfu 22.86%
+iter 980: loss 6.2247, time 42.52ms, mfu 22.88%
+iter 990: loss 6.2440, time 43.11ms, mfu 22.87%
+Traceback (most recent call last):
+  File "/home/s.nanako/nanogpt/train.py", line 264, in <module>
+    losses = estimate_loss()
+             ^^^^^^^^^^^^^^^
+  File "/home/s.nanako/nanogpt/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/s.nanako/nanogpt/train.py", line 225, in estimate_loss
+    losses[k] = loss.item()
+                ^^^^^^^^^^^
+KeyboardInterrupt
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33mno-ffn-gpt2_shakespeare_1762767792.678713[0m at: [34m[0m
+[1;34mwandb[0m: Find logs at: [1;35mwandb/run-20251110_184320-51yc5egh/logs[0m
